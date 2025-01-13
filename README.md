@@ -1,1 +1,1 @@
-# l-store
+# L-store database project
