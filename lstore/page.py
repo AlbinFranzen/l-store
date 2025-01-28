@@ -2,11 +2,14 @@ class Page:
     def __init__(self):
         self.num_records = 0
         self.data = []
-
+        
     def has_capacity(self): # Check if page has capacity
         return (self.num_records < 512) 
 
     def append(self, record): # Append record
+       if not self.has_capacity():
+           print("Maximum capacity of 512 records has been reached.")
+           return
        self.data.append(record)
        self.num_records += 1
        pass
