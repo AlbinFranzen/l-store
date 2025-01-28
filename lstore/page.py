@@ -11,7 +11,7 @@ class Page:
        self.num_records += 1
        pass
     
-    def overwrite(self, index, value): # Assume value is 8 bytes (64-bit integer)
+    def overwrite(self, index, value): # Assume value is 8 bytes (64-bit integer), used for indirection
         self.data[index * 8 : index * 8 + 8] = value  # Overwrite value at index
         pass
     
