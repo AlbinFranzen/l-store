@@ -10,3 +10,9 @@ class Page:
        self.data[self.num_records * 8 : self.num_records * 8 + 8] = value  # Write value to the next available slot
        self.num_records += 1
        pass
+    
+    def read_all(self):
+        return self.data
+    
+    def read_index(self, index):
+        return self.data[index * 8 : index * 8 + 8]
