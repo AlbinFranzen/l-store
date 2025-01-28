@@ -1,22 +1,22 @@
 class Page:
     def __init__(self):
         self.num_records = 0
-        self.data = bytearray(4096)
+        self.data = []
 
-    def has_capacity(self):
-        return (self.num_records < 512) # If fewer records than 512, we have capacity to write
+    def has_capacity(self): # Check if page has capacity
+        return (self.num_records < 512) 
 
-    def append(self, value): # Assume value is 8 bytes (64-bit integer)
-       self.data[self.num_records * 8 : self.num_records * 8 + 8] = value  # Write value to the next available slot
+    def append(self, record): # Append record
+       self.data.append(record)
        self.num_records += 1
        pass
     
-    def overwrite(self, index, value): # Assume value is 8 bytes (64-bit integer), used for indirection
-        self.data[index * 8 : index * 8 + 8] = value  # Overwrite value at index
+    def overwrite_rid(self, index, value): # Overwrite the rid at index
+        self.data[index].rid = value  
         pass
     
-    def read_all(self):
+    def read_all(self): # Read all records
         return self.data
     
-    def read_index(self, index):
-        return self.data[index * 8 : index * 8 + 8]
+    def read_index(self, index): # Read record at index
+        return self.data[index]
