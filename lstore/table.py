@@ -25,7 +25,7 @@ class Table:
         self.name = name
         self.key = key
         self.num_columns = num_columns
-        self.page_directory = {}
+        self.page_directory = {} # maps rid to corresponding tail and base pages
         self.index = Index(self)
         pass
 

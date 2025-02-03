@@ -1,6 +1,5 @@
 import config
 
-
 class Page:
     def __init__(self):
         self.num_records = 0
