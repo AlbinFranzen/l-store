@@ -1,4 +1,4 @@
-import config
+from config import PAGE_RECORD_SIZE
 
 
 class Page:
@@ -7,7 +7,7 @@ class Page:
         self.data = []
 
     def has_capacity(self):  # Check if page has capacity
-        return self.num_records < config.PAGE_RECORD_SIZE
+        return self.num_records < PAGE_RECORD_SIZE
 
     def append(self, record):  # Append record
         if not self.has_capacity():

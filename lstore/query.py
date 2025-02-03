@@ -2,6 +2,7 @@ from lstore.table import Table, Record
 from lstore.index import Index
 from lstore.page import PAGE
 from lstore.config import *
+import time
 
 
 class Query:
@@ -13,6 +14,8 @@ class Query:
     """
     def __init__(self, table):
         self.table = table
+        self.current_rid = 0
+        self.current_key = 0
         pass
 
     
@@ -32,8 +35,12 @@ class Query:
     # Returns False if insert fails for whatever reason
     """
     def insert(self, *columns):
-        schema_encoding = '0' * self.table.num_columns
-        pass
+        record = Record(self.current_rid, self.current_key, time.time(), 0, columns) # Create record instance
+        record_with_metadata = self.table.insert_record(record) # Insert record to the table and update metadata
+        self.table.page_directory[self.current_rid] = [record_with_metadata] # Add new instance to directory
+        self.current_rid += 1
+        self.current_key += 1
+        return True
 
     
     """

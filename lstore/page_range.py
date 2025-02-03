@@ -1,10 +1,11 @@
-# structure that defines list of valid base and tail pages
-class PageRangeIndex:
+from page import Page
 
+# structure that defines list of valid base and tail pages
+class PageRange:
     def __init__(self):
-        self.base_pages = []
-        self.tail_pages = []
-        self.max_base_pages = 16    # amount defined in Milestone 1
+        self.base_pages = [Page()]
+        self.tail_pages = [Page()]
+        self.max_base_pages = 16  # amount defined in Milestone 1
 
     # accessors
     def get_tail_pages(self):
@@ -58,4 +59,6 @@ class PageRangeIndex:
         if len(base_pages_list) < self.max_base_pages:
             self.base_pages = base_pages_list
         else:
-            print(f"Unable to set base pages. Passed list exceeds max amount of base pages: ${self.max_base_pages}")
+            print(
+                f"Unable to set base pages. Passed list exceeds max amount of base pages: ${self.max_base_pages}"
+            )
