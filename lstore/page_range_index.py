@@ -1,10 +1,12 @@
 # structure that defines list of valid base and tail pages
+import config
+
 class PageRangeIndex:
 
     def __init__(self):
         self.base_pages = []
         self.tail_pages = []
-        self.max_base_pages = 16    # amount defined in Milestone 1
+        self.max_base_pages = config.PAGE_RANGE_SIZE    # amount defined in Milestone 1
 
     # accessors
     def get_tail_pages(self):
