@@ -1,9 +1,11 @@
+from uuid import uuid4
 from lstore.table import Table, Record
 from lstore.index import Index
 from lstore.page import Page
+from lstore.page_range import PageRange
 from lstore.config import *
 import time
-
+import copy
 
 class Query:
     """
@@ -87,7 +89,59 @@ class Query:
     # FOR TAIL PAGES
     """
     def update(self, primary_key, *columns):
-        pass
+        # check if the record exists in the table
+        if primary_key not in self.table.page_directory:
+            return False
+        
+        # turn *columns into a list
+        updated_columns = list(columns)
+        # get the base record object
+        baserecordOJ = self.table.get_record(primary_key)
+        # get the current tail page
+        cur_tail_page = self.page_range.get_tail_page()
+
+        # check if the tail page is full
+        if not cur_tail_page.tail_page_has_capacity():
+            # create a new tail page
+            new_tail_page = Page()
+            cur_tail_page = new_tail_page
+            # add tail_page in the page range
+
+        # if it is the first time updating the base_record
+        if(baserecordOJ.indirection == None):
+            # create the first tail record
+            first_tail_record = copy.deepcopy(baserecordOJ)
+            first_tail_record.rid = uuid4()
+            first_tail_record.indirection = baserecordOJ.rid
+            first_tail_record.time_stamp = time.time()
+            first_tail_record.schema_encoding = 
+
+            for i in range(len(updated_columns)):
+                first_tail_record.columns[i] = updated_columns[i]
+
+            baserecordOJ.indirection = first_tail_record.rid
+
+            # write the first tail record to the tail page
+            cur_tail_page.insert_record(first_tail_record)
+
+        # if the base record has been updated before
+        recent_tail_record = cur_tail_page.get_record(baserecordOJ.indirection)
+        # create a new tail record
+        new_tail_record = copy.deepcopy(recent_tail_record)
+        new_tail_record.rid = uuid4()
+        new_tail_record.time_stamp = time.time()
+        new_tail_record.schema_encoding =
+        new_tail_record.indirection = recent_tail_record.rid
+
+        for i in range(len(updated_columns)):
+            new_tail_record.columns[i] = updated_columns[i]
+
+        baserecordOJ.indirection = new_tail_record.rid
+
+        # write the new tail record to the tail page
+        cur_tail_page.insert_record(new_tail_record)
+
+        return True
 
     
     """
