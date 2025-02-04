@@ -153,6 +153,18 @@ class Query:
     # Returns False if no record exists in the given range
     """
     def sum(self, start_range, end_range, aggregate_column_index):
+        total_sum = 0
+        record_exists = False
+        for primary_key in range(start_range, end_range + 1):
+            if primary_key in self.table.page_directory:
+                record = self.index.get_record(primary_key)
+                total_sum += record.columns[aggregate_column_index]
+                record_exists = True
+        if record_exists:
+            return total_sum
+        else:
+            return False
+        
         pass
 
     
