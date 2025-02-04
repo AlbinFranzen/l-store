@@ -1,6 +1,6 @@
 from lstore.table import Table, Record
 from lstore.index import Index
-from lstore.page import PAGE
+from lstore.page import Page
 from lstore.config import *
 import time
 
@@ -33,6 +33,7 @@ class Query:
     # Insert a record with specified columns
     # Return True upon succesful insertion
     # Returns False if insert fails for whatever reason
+    # FOR BASE PAGES
     """
     def insert(self, *columns):
         record = Record(self.current_rid, self.current_key, time.time(), 0, columns) # Create record instance
@@ -65,6 +66,7 @@ class Query:
     # Returns a list of Record objects upon success
     # Returns False if record locked by TPL
     # Assume that select will never be called on a key that doesn't exist
+    # RELATIVE_VERSION USAGE: (-1, -2, etc)
     """
     def select_version(self, search_key, search_key_index, projected_columns_index, relative_version):
         pass
@@ -74,6 +76,7 @@ class Query:
     # Update a record with specified key and columns
     # Returns True if update is succesful
     # Returns False if no records exist with given key or if the target record cannot be accessed due to 2PL locking
+    # FOR TAIL PAGES
     """
     def update(self, primary_key, *columns):
         pass
