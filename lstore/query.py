@@ -38,11 +38,27 @@ class Query:
     # FOR BASE PAGES
     """
     def insert(self, *columns):
+         # Verify input
         if not self.verify_insert_input(*columns):
             return False
-        record = Record(self.current_rid, self.current_key, time.time(), 0, columns) # Create record instance
-        page_range_index, base_page_index, offset = self.table.insert_record(record) # Insert record to the table and update metadata
-        self.table.page_directory[self.current_rid] = [[page_range_index, base_page_index, offset]] # Add new instance to directory
+        
+        # Create record
+        record = Record(self.current_rid, self.current_key, time.time(), 0, columns)
+        
+        # Make sure space exists
+        self.table.index.add_record(record)
+        if not self.table.page_ranges[-1].has_capacity(): # If page range is full, create new one
+            self.table.page_ranges.append(PageRange())
+        if not self.table.page_ranges[-1].base_pages[-1].has_capacity(): # If base page is full, create new one
+            self.table.page_ranges[-1].base_pages.append(Page())
+            
+        # Write and get location 
+        offset = self.table.page_ranges[-1].base_pages[-1].write(record) 
+        base_page_index = len(self.table.page_ranges[-1].base_pages) - 1
+        page_range_index = len(self.table.page_ranges) - 1
+        self.table.page_directory[self.current_key] = [[page_range_index, base_page_index, offset]] 
+        
+        # Update the rid and key
         self.current_rid += 1
         self.current_key += 1
         return True
@@ -114,7 +130,7 @@ class Query:
             first_tail_record.rid = uuid4()
             first_tail_record.indirection = baserecordOJ.rid
             first_tail_record.time_stamp = time.time()
-            first_tail_record.schema_encoding = 
+            first_tail_record.schema_encoding = 0
 
             for i in range(len(updated_columns)):
                 first_tail_record.columns[i] = updated_columns[i]
@@ -130,7 +146,7 @@ class Query:
         new_tail_record = copy.deepcopy(recent_tail_record)
         new_tail_record.rid = uuid4()
         new_tail_record.time_stamp = time.time()
-        new_tail_record.schema_encoding =
+        new_tail_record.schema_encoding = 0
         new_tail_record.indirection = recent_tail_record.rid
 
         for i in range(len(updated_columns)):
