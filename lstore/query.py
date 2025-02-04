@@ -96,7 +96,7 @@ class Query:
         # turn *columns into a list
         updated_columns = list(columns)
         # get the base record object
-        baserecordOJ = self.table.get_record(primary_key)
+        baserecordOJ = self.index.get_record(primary_key)
         # get the current tail page
         cur_tail_page = self.page_range.get_tail_page()
 
@@ -125,7 +125,7 @@ class Query:
             cur_tail_page.insert_record(first_tail_record)
 
         # if the base record has been updated before
-        recent_tail_record = cur_tail_page.get_record(baserecordOJ.indirection)
+        recent_tail_record = self.index.get_record(baserecordOJ.indirection)
         # create a new tail record
         new_tail_record = copy.deepcopy(recent_tail_record)
         new_tail_record.rid = uuid4()
