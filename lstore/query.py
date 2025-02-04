@@ -38,7 +38,7 @@ class Query:
     def insert(self, *columns):
         record = Record(self.current_rid, self.current_key, time.time(), 0, columns) # Create record instance
         page_range_index, base_page_index, offset = self.table.insert_record(record) # Insert record to the table and update metadata
-        self.table.page_directory[self.current_rid] = [page_range_index, base_page_index, offset] # Add new instance to directory
+        self.table.page_directory[self.current_rid] = [[page_range_index, base_page_index, offset]] # Add new instance to directory
         self.current_rid += 1
         self.current_key += 1
         return True

@@ -1,6 +1,6 @@
 from lstore.index import Index
 from time import time
-from page_range import PageRange
+from lstore.page_range import PageRange
 
 INDIRECTION_COLUMN = 0
 RID_COLUMN = 1
@@ -34,7 +34,14 @@ class Table:
         pass
 
     def insert_record(self, record):
-        pass
+        if not self.page_ranges[-1].base_page_has_capacity():
+            self.page_ranges.append(PageRange())
+        offset, base_page_index = self.page_ranges[-1].insert_record(record)
+        if base_page_index == False:
+            self.page_ranges.append(PageRange())
+            offset, base_page_index = self.page_ranges[-1].insert_record(record)
+        page_range_index = len(self.page_ranges) - 1
+        return page_range_index, base_page_index, offset
 
     def __merge(self):
         print("merge is happening")

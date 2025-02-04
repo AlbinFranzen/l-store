@@ -1,11 +1,12 @@
-from page import Page
+from lstore.page import Page
+from lstore.config import *
 
 # structure that defines list of valid base and tail pages
 class PageRange:
     def __init__(self):
         self.base_pages = [Page()]
         self.tail_pages = [Page()]
-        self.max_base_pages = 16  # amount defined in Milestone 1
+        self.max_base_pages = PAGE_RANGE_SIZE  # amount defined in Milestone 1
 
     # accessors
     def get_tail_pages(self):
@@ -62,3 +63,13 @@ class PageRange:
             print(
                 f"Unable to set base pages. Passed list exceeds max amount of base pages: ${self.max_base_pages}"
             )
+            
+    def insert_record(self, record):
+        if not self.base_pages[-1].has_capacity():
+            if not self.base_page_has_capacity():
+                return False, False
+            self.base_pages.append(Page())
+        offset = self.base_pages[-1].write(record)
+        base_page_index = len(self.base_pages) - 1
+        return offset, base_page_index
+
