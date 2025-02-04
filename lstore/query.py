@@ -1,9 +1,11 @@
+from uuid import uuid4
 from lstore.table import Table, Record
 from lstore.index import Index
 from lstore.page import Page
+from lstore.page_range import PageRange
 from lstore.config import *
 import time
-
+import copy
 
 class Query:
     """
@@ -14,10 +16,18 @@ class Query:
     """
     def __init__(self, table):
         self.table = table
-        self.current_rid = 0
+        self.current_base_rid = 0
+        self.current_tail_rid = 1
         self.current_key = 0
         pass
-
+    
+    def update_base_rid(self):
+        self.current_base_rid += 1
+        pass
+    
+    def update_tail_rid(self):
+        self.current_tail_rid += 1
+        pass
     
     """
     # internal Method
@@ -36,16 +46,29 @@ class Query:
     # FOR BASE PAGES
     """
     def insert(self, *columns):
-        if not self.verify_insert_input(*columns):
+         # Verify input
+        if not self._verify_insert_input(*columns):
             return False
-        record = Record(self.current_rid, self.current_key, time.time(), 0, columns) # Create record instance
-        page_range_index, base_page_index, offset = self.table.insert_record(record) # Insert record to the table and update metadata
-        self.table.page_directory[self.current_rid] = [[page_range_index, base_page_index, offset]] # Add new instance to directory
-        self.current_rid += 1
-        self.current_key += 1
+        
+        # Create record
+        record = Record(None, "b" + str(self.current_base_rid), self.current_key, time.time(), "0" * (sum(1 for _ in (*columns,)) + 1), columns)
+        self.current_base_rid += 1
+        
+        # Make sure space exists
+        self.table.index.add_record(record)
+        if not self.table.page_ranges[-1].has_capacity(): # If page range is full, create new one
+            self.table.page_ranges.append(PageRange())
+        if not self.table.page_ranges[-1].base_pages[-1].has_capacity(): # If base page is full, create new one
+            self.table.page_ranges[-1].base_pages.append(Page())
+            
+        # Write and get location 
+        offset = self.table.page_ranges[-1].base_pages[-1].write(record) 
+        base_page_index = len(self.table.page_ranges[-1].base_pages) - 1
+        page_range_index = len(self.table.page_ranges) - 1
+        self.table.page_directory[self.current_key] = [[page_range_index, base_page_index, offset]] 
         return True
     
-    def verify_insert_input(self, *columns):
+    def _verify_insert_input(self, *columns):
         for column in columns:
             if not isinstance(column, int):
                 return False
@@ -62,7 +85,29 @@ class Query:
     # Assume that select will never be called on a key that doesn't exist
     """
     def select(self, search_key, search_key_index, projected_columns_index):
-        pass
+        # Get the rids of the records with the search key
+        rid_list = self.table.index.locate(search_key, search_key_index)
+        if rid_list == False:
+            return False
+        records = []
+        
+        # Get the corresponding records
+        for rid in rid_list:   
+            current_rid = rid
+            while True:
+                current_location = self.table.page_directory[current_rid]
+                current_record = self.table.page_ranges.location[current_location[0]].base_pages[current_location[1]].read_index(current_location[2])
+                if current_record.indirection == None or current_record.indirection == rid: 
+                    records.append(current_record)
+                    break
+                
+        # Convert records to only have the projected columns
+        output_records = []
+        for record in records:
+            new_record = record.deepcopy(record)
+            new_record.columns = [record.columns[i] for i in range(len(record.columns)) if projected_columns_index[i] == 1]
+            output_records.append(new_record)     
+        return output_records
 
     
     """
@@ -87,7 +132,59 @@ class Query:
     # FOR TAIL PAGES
     """
     def update(self, primary_key, *columns):
-        pass
+        # check if the record exists in the table
+        if primary_key not in self.table.page_directory:
+            return False
+        
+        # turn *columns into a list
+        updated_columns = list(columns)
+        # get the base record object
+        baserecordOJ = self.index.get_record(primary_key)
+        # get the current tail page
+        cur_tail_page = self.page_range.get_tail_page()
+
+        # check if the tail page is full
+        if not cur_tail_page.tail_page_has_capacity():
+            # create a new tail page
+            new_tail_page = Page()
+            cur_tail_page = new_tail_page
+            # add tail_page in the page range
+
+        # if it is the first time updating the base_record
+        if(baserecordOJ.indirection == None):
+            # create the first tail record
+            first_tail_record = copy.deepcopy(baserecordOJ)
+            first_tail_record.rid = uuid4()
+            first_tail_record.indirection = baserecordOJ.rid
+            first_tail_record.time_stamp = time.time()
+            first_tail_record.schema_encoding = 0
+
+            for i in range(len(updated_columns)):
+                first_tail_record.columns[i] = updated_columns[i]
+
+            baserecordOJ.indirection = first_tail_record.rid
+
+            # write the first tail record to the tail page
+            cur_tail_page.insert_record(first_tail_record)
+
+        # if the base record has been updated before
+        recent_tail_record = self.index.get_record(baserecordOJ.indirection)
+        # create a new tail record
+        new_tail_record = copy.deepcopy(recent_tail_record)
+        new_tail_record.rid = uuid4()
+        new_tail_record.time_stamp = time.time()
+        new_tail_record.schema_encoding = 0
+        new_tail_record.indirection = recent_tail_record.rid
+
+        for i in range(len(updated_columns)):
+            new_tail_record.columns[i] = updated_columns[i]
+
+        baserecordOJ.indirection = new_tail_record.rid
+
+        # write the new tail record to the tail page
+        cur_tail_page.insert_record(new_tail_record)
+
+        return True
 
     
     """
@@ -99,6 +196,18 @@ class Query:
     # Returns False if no record exists in the given range
     """
     def sum(self, start_range, end_range, aggregate_column_index):
+        total_sum = 0
+        record_exists = False
+        for primary_key in range(start_range, end_range + 1):
+            if primary_key in self.table.page_directory:
+                record = self.index.get_record(primary_key)
+                total_sum += record.columns[aggregate_column_index]
+                record_exists = True
+        if record_exists:
+            return total_sum
+        else:
+            return False
+        
         pass
 
     

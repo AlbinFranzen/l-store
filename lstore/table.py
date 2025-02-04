@@ -10,8 +10,9 @@ SCHEMA_ENCODING_COLUMN = 3
 
 class Record:
 
-    def __init__(self, rid, key, time_stamp, schema_encoding, columns):
+    def __init__(self, indirection, rid, key, time_stamp, schema_encoding, columns):
         self.rid = rid
+        self.indirection = indirection
         self.key = key
         self.time_stamp = time_stamp
         self.schema_encoding = schema_encoding
@@ -32,17 +33,7 @@ class Table:
         self.page_directory = {}
         self.index = Index(self)
         pass
-
-    def insert_record(self, record):
-        self.index.add_record(record)
-        if not self.page_ranges[-1].base_page_has_capacity():
-            self.page_ranges.append(PageRange())
-        offset, base_page_index = self.page_ranges[-1].insert_record(record)
-        if base_page_index == False:
-            self.page_ranges.append(PageRange())
-            offset, base_page_index = self.page_ranges[-1].insert_record(record)
-        page_range_index = len(self.page_ranges) - 1
-        return page_range_index, base_page_index, offset
+        
 
     def __merge(self):
         print("merge is happening")

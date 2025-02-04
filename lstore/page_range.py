@@ -22,8 +22,12 @@ class PageRange:
         return len(self.base_pages)
 
     # mutators
-    def base_page_has_capacity(self):
-        return self.get_num_base_pages() < self.max_base_pages
+    def has_capacity(self):
+        if self.get_num_base_pages() == self.max_base_pages:
+            return False
+        if not self.base_pages[-1].has_capacity():
+            return False
+        return True
 
     # inserts new tail page
     def insert_tail_page(self, new_tail_page):
@@ -64,12 +68,4 @@ class PageRange:
                 f"Unable to set base pages. Passed list exceeds max amount of base pages: ${self.max_base_pages}"
             )
             
-    def insert_record(self, record):
-        if not self.base_pages[-1].has_capacity():
-            if not self.base_page_has_capacity():
-                return False, False
-            self.base_pages.append(Page())
-        offset = self.base_pages[-1].write(record)
-        base_page_index = len(self.base_pages) - 1
-        return offset, base_page_index
 
