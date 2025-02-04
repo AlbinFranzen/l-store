@@ -34,6 +34,7 @@ class Table:
         pass
 
     def insert_record(self, record):
+        self.index.add_record(record)
         if not self.page_ranges[-1].base_page_has_capacity():
             self.page_ranges.append(PageRange())
         offset, base_page_index = self.page_ranges[-1].insert_record(record)

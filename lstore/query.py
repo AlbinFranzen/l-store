@@ -36,11 +36,19 @@ class Query:
     # FOR BASE PAGES
     """
     def insert(self, *columns):
+        if not self.verify_insert_input(*columns):
+            return False
         record = Record(self.current_rid, self.current_key, time.time(), 0, columns) # Create record instance
         page_range_index, base_page_index, offset = self.table.insert_record(record) # Insert record to the table and update metadata
         self.table.page_directory[self.current_rid] = [[page_range_index, base_page_index, offset]] # Add new instance to directory
         self.current_rid += 1
         self.current_key += 1
+        return True
+    
+    def verify_insert_input(self, *columns):
+        for column in columns:
+            if not isinstance(column, int):
+                return False
         return True
 
     

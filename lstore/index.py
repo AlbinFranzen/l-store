@@ -36,3 +36,6 @@ class Index:
 
     def drop_index(self, column_number):
         pass
+    
+    def add_record(self, record):
+        pass
