@@ -16,10 +16,18 @@ class Query:
     """
     def __init__(self, table):
         self.table = table
-        self.current_rid = 0
+        self.current_base_rid = 0
+        self.current_tail_rid = 1
         self.current_key = 0
         pass
-
+    
+    def update_base_rid(self):
+        self.current_base_rid += 1
+        pass
+    
+    def update_tail_rid(self):
+        self.current_tail_rid += 1
+        pass
     
     """
     # internal Method
@@ -39,11 +47,12 @@ class Query:
     """
     def insert(self, *columns):
          # Verify input
-        if not self.verify_insert_input(*columns):
+        if not self._verify_insert_input(*columns):
             return False
         
         # Create record
-        record = Record(self.current_rid, self.current_key, time.time(), 0, columns)
+        record = Record(None, "b" + str(self.current_base_rid), self.current_key, time.time(), "0" * (sum(1 for _ in (*columns,)) + 1), columns)
+        self.current_base_rid += 1
         
         # Make sure space exists
         self.table.index.add_record(record)
@@ -57,13 +66,9 @@ class Query:
         base_page_index = len(self.table.page_ranges[-1].base_pages) - 1
         page_range_index = len(self.table.page_ranges) - 1
         self.table.page_directory[self.current_key] = [[page_range_index, base_page_index, offset]] 
-        
-        # Update the rid and key
-        self.current_rid += 1
-        self.current_key += 1
         return True
     
-    def verify_insert_input(self, *columns):
+    def _verify_insert_input(self, *columns):
         for column in columns:
             if not isinstance(column, int):
                 return False
@@ -80,7 +85,29 @@ class Query:
     # Assume that select will never be called on a key that doesn't exist
     """
     def select(self, search_key, search_key_index, projected_columns_index):
-        pass
+        # Get the rids of the records with the search key
+        rid_list = self.table.index.locate(search_key, search_key_index)
+        if rid_list == False:
+            return False
+        records = []
+        
+        # Get the corresponding records
+        for rid in rid_list:   
+            current_rid = rid
+            while True:
+                current_location = self.table.page_directory[current_rid]
+                current_record = self.table.page_ranges.location[current_location[0]].base_pages[current_location[1]].read_index(current_location[2])
+                if current_record.indirection == None or current_record.indirection == rid: 
+                    records.append(current_record)
+                    break
+                
+        # Convert records to only have the projected columns
+        output_records = []
+        for record in records:
+            new_record = record.deepcopy(record)
+            new_record.columns = [record.columns[i] for i in range(len(record.columns)) if projected_columns_index[i] == 1]
+            output_records.append(new_record)     
+        return output_records
 
     
     """
