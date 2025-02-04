@@ -39,7 +39,7 @@ class Index:
             # If rids contains matching record IDs, return them
             if rids:
                 return rids
-        return None  # Return None if no matching record is found
+        return False  # Return None if no matching record is found
 
 
 
