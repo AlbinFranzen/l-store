@@ -2,7 +2,7 @@ import bisect
 from bplustree import BPlusTree
 
 """
-A data strucutre holding indices for various columns of a table. Key column should be indexd by default, other columns can be indexed through this object. Indices are usually B-Trees, but other data structures can be used as well.
+A data strucutre hoxlding indices for various columns of a table. Key column should be indexd by default, other columns can be indexed through this object. Indices are usually B-Trees, but other data structures can be used as well.
 """
 class Index:
 
@@ -75,4 +75,7 @@ class Index:
     # optional: Drop index of specific column
     """
     def drop_index(self, column_number):
+        pass
+    
+    def add_record(self, record):
         pass

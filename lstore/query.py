@@ -1,5 +1,8 @@
 from lstore.table import Table, Record
 from lstore.index import Index
+from lstore.page import Page
+from lstore.config import *
+import time
 
 
 class Query:
@@ -11,6 +14,8 @@ class Query:
     """
     def __init__(self, table):
         self.table = table
+        self.current_rid = 0
+        self.current_key = 0
         pass
 
     
@@ -28,10 +33,23 @@ class Query:
     # Insert a record with specified columns
     # Return True upon succesful insertion
     # Returns False if insert fails for whatever reason
+    # FOR BASE PAGES
     """
     def insert(self, *columns):
-        schema_encoding = '0' * self.table.num_columns
-        pass
+        if not self.verify_insert_input(*columns):
+            return False
+        record = Record(self.current_rid, self.current_key, time.time(), 0, columns) # Create record instance
+        page_range_index, base_page_index, offset = self.table.insert_record(record) # Insert record to the table and update metadata
+        self.table.page_directory[self.current_rid] = [[page_range_index, base_page_index, offset]] # Add new instance to directory
+        self.current_rid += 1
+        self.current_key += 1
+        return True
+    
+    def verify_insert_input(self, *columns):
+        for column in columns:
+            if not isinstance(column, int):
+                return False
+        return True
 
     
     """
@@ -56,6 +74,7 @@ class Query:
     # Returns a list of Record objects upon success
     # Returns False if record locked by TPL
     # Assume that select will never be called on a key that doesn't exist
+    # RELATIVE_VERSION USAGE: (-1, -2, etc)
     """
     def select_version(self, search_key, search_key_index, projected_columns_index, relative_version):
         pass
@@ -65,6 +84,7 @@ class Query:
     # Update a record with specified key and columns
     # Returns True if update is succesful
     # Returns False if no records exist with given key or if the target record cannot be accessed due to 2PL locking
+    # FOR TAIL PAGES
     """
     def update(self, primary_key, *columns):
         pass
