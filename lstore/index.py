@@ -17,7 +17,7 @@ class Index:
     # returns the location of all records with the given value on column "column"
     # Assumes self.indices[column] is a B+ Tree.
     # Binary searches order B+ Tree list for first occurance and linearly iterates 
-      until the column values for the record do not match the desired value
+      until the column values for the record do not match the desired value.
     """
     def locate(self, column, value):
         if self.indices[column] is not None:  # Ensure the B+ Tree exists for the column
