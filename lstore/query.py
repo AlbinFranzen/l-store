@@ -17,7 +17,7 @@ class Query:
     def __init__(self, table):
         self.table = table
         self.current_base_rid = 0
-        self.current_tail_rid = 1
+        self.current_tail_rid = 0
         self.current_key = 0
         pass
     
@@ -51,8 +51,7 @@ class Query:
             return False
         
         # Create record
-        record = Record(None, "b" + str(self.current_base_rid), self.current_key, time.time(), "0" * (sum(1 for _ in (*columns,)) + 1), columns)
-        self.current_base_rid += 1
+        record = Record(None, "b" + str(self.current_base_rid), time.time(), [0] * (sum(1 for _ in (*columns,)) + 1), [self.current_key, *columns])
         
         # Make sure space exists
         self.table.index.add_record(record)
@@ -64,8 +63,11 @@ class Query:
         # Write and get location 
         offset = self.table.page_ranges[-1].base_pages[-1].write(record) 
         base_page_index = len(self.table.page_ranges[-1].base_pages) - 1
-        page_range_index = len(self.table.page_ranges) - 1
-        self.table.page_directory[self.current_key] = [[page_range_index, base_page_index, offset]] 
+        page_range_index = len(self.table.page_ranges) - 1 
+        
+        # Add new location to page directory 
+        self.table.page_directory["b" + str(self.current_base_rid)] = [[page_range_index, base_page_index, offset]]
+        self.current_base_rid += 1
         return True
     
     def _verify_insert_input(self, *columns):
@@ -85,30 +87,39 @@ class Query:
     # Assume that select will never be called on a key that doesn't exist
     """
     def select(self, search_key, search_key_index, projected_columns_index):
-        # Get the rids of the records with the search key
-        rid_list = self.table.index.locate(search_key, search_key_index)
+        # Get the base rids of the records with the search key
+        rid_list = self.table.index.locate(search_key_index, search_key)
+        rid_list = ["b0"]
         if rid_list == False:
             return False
-        records = []
-        
         # Get the corresponding records
+        records = []
         for rid in rid_list:   
-            current_rid = rid
-            while True:
-                current_location = self.table.page_directory[current_rid]
-                current_record = self.table.page_ranges.location[current_location[0]].base_pages[current_location[1]].read_index(current_location[2])
-                if current_record.indirection == None or current_record.indirection == rid: 
-                    records.append(current_record)
-                    break
-                
+            records.append(self._traverse_lineage(rid)[-1])
+
         # Convert records to only have the projected columns
         output_records = []
         for record in records:
-            new_record = record.deepcopy(record)
-            new_record.columns = [record.columns[i] for i in range(len(record.columns)) if projected_columns_index[i] == 1]
+            if sum(projected_columns_index) == len(projected_columns_index):
+                output_records.append(record)
+                continue    
+            new_record = Record(record.rid, record.indirection, record.time_stamp, record.schema_encoding, [record.columns[i+1] for i in range(len(record.columns)-1) if projected_columns_index[i] == 1])
             output_records.append(new_record)     
         return output_records
-
+    
+    # Get list of records from base_rid
+    def _traverse_lineage(self, base_rid):
+        lineage = [] 
+        for i in range(len(self.table.page_directory[base_rid])):
+            page_range_index, page_index, offset  = self.table.page_directory[base_rid][i]
+            if i != 0: # Iterate through tail pages or base pages
+                current_record = self.table.page_ranges[page_range_index].tail_pages[page_index].read_index(offset) 
+            else:
+                current_record = self.table.page_ranges[page_range_index].base_pages[page_index].read_index(offset) 
+            lineage.append(current_record)
+            if current_record.indirection == None or current_record.indirection == base_rid: 
+                break
+        return lineage
     
     """
     # Read matching record with specified search key
@@ -132,58 +143,36 @@ class Query:
     # FOR TAIL PAGES
     """
     def update(self, primary_key, *columns):
-        # check if the record exists in the table
-        if primary_key not in self.table.page_directory:
+        # Get the rids of the records with the primary key
+        base_rid = self.table.index.locate(0, primary_key)
+        base_rid = ["b0"]
+        if base_rid == False:
             return False
         
-        # turn *columns into a list
-        updated_columns = list(columns)
-        # get the base record object
-        baserecordOJ = self.index.get_record(primary_key)
-        # get the current tail page
-        cur_tail_page = self.page_range.get_tail_page()
-
-        # check if the tail page is full
-        if not cur_tail_page.tail_page_has_capacity():
-            # create a new tail page
-            new_tail_page = Page()
-            cur_tail_page = new_tail_page
-            # add tail_page in the page range
-
-        # if it is the first time updating the base_record
-        if(baserecordOJ.indirection == None):
-            # create the first tail record
-            first_tail_record = copy.deepcopy(baserecordOJ)
-            first_tail_record.rid = uuid4()
-            first_tail_record.indirection = baserecordOJ.rid
-            first_tail_record.time_stamp = time.time()
-            first_tail_record.schema_encoding = 0
-
-            for i in range(len(updated_columns)):
-                first_tail_record.columns[i] = updated_columns[i]
-
-            baserecordOJ.indirection = first_tail_record.rid
-
-            # write the first tail record to the tail page
-            cur_tail_page.insert_record(first_tail_record)
-
-        # if the base record has been updated before
-        recent_tail_record = self.index.get_record(baserecordOJ.indirection)
-        # create a new tail record
-        new_tail_record = copy.deepcopy(recent_tail_record)
-        new_tail_record.rid = uuid4()
-        new_tail_record.time_stamp = time.time()
-        new_tail_record.schema_encoding = 0
-        new_tail_record.indirection = recent_tail_record.rid
-
-        for i in range(len(updated_columns)):
-            new_tail_record.columns[i] = updated_columns[i]
-
-        baserecordOJ.indirection = new_tail_record.rid
-
-        # write the new tail record to the tail page
-        cur_tail_page.insert_record(new_tail_record)
-
+        # Get all records in lineage
+        lineage = self._traverse_lineage(base_rid[0])
+        
+        # Create new record
+        record = Record(lineage[0].rid, "t" + str(self.current_tail_rid), time.time(), [1 if update is not None else orig for orig, update in zip(lineage[0].schema_encoding, [lineage[-1].columns[0], *columns])], [upd if upd is not None else orig for orig, upd in zip(lineage[-1].columns, [lineage[-1].columns[0], *columns])])
+        # Update old records
+        lineage[0].schema_encoding = record.schema_encoding
+        lineage[-1].indirection = record.rid
+        
+        # Make sure space exists
+        self.table.index.add_record(record)
+        if not self.table.page_ranges[-1].has_capacity(): # If page range is full, create new one
+            self.table.page_ranges.append(PageRange())
+        if not self.table.page_ranges[-1].tail_pages[-1].has_capacity(): # If base page is full, create new one
+            self.table.page_ranges[-1].tail_pages.append(Page())
+            
+        # Write and get location 
+        offset = self.table.page_ranges[-1].tail_pages[-1].write(record) 
+        tail_page_index = len(self.table.page_ranges[-1].tail_pages) - 1
+        page_range_index = len(self.table.page_ranges) - 1 
+        
+        # Add new location to page directory 
+        self.table.page_directory[lineage[0].rid].append([page_range_index, tail_page_index, offset])
+        self.current_tail_rid += 1
         return True
 
     

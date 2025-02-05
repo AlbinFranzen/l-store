@@ -10,10 +10,9 @@ SCHEMA_ENCODING_COLUMN = 3
 
 class Record:
 
-    def __init__(self, indirection, rid, key, time_stamp, schema_encoding, columns):
-        self.rid = rid
+    def __init__(self, indirection, rid, time_stamp, schema_encoding, columns):
         self.indirection = indirection
-        self.key = key
+        self.rid = rid
         self.time_stamp = time_stamp
         self.schema_encoding = schema_encoding
         self.columns = columns
