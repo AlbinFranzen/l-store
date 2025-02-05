@@ -36,6 +36,48 @@ class Query:
     # Return False if record doesn't exist or is locked due to 2PL
     """
     def delete(self, primary_key):
+        # get rids with the primary key
+        base_rid = self.table.index.locate(0, primary_key)
+        if base_rid == False:
+            return False
+        
+        # get all records in lineage
+        lineage = self._traverse_lineage(base_rid[0])
+
+        # create a new tail record
+        record = Record(
+                        lineage[0].rid,
+                        "t" + str(self.current_tail_rid),
+                        time.time(),
+                        [0] * (len(lineage[0].schema_encoding) - 1),
+                        [None] * len(lineage[0].columns)
+                    )
+        
+        # update base record's schema encoding
+        lineage[0].schema_encoding = record.schema_encoding
+        lineage[-1].indirection = record.rid
+
+        # ensure space exists
+        if not self.table.page_ranges[-1].tail_pages[-1].has_capacity():
+            self.table.page_ranges[-1].tail_pages.append(Page())
+        if not self.table.page_ranges[-1].has_capacity():
+            self.table.page_ranges.append(PageRange())
+        
+        # add record in index
+        self.table.index.add_record(record)
+
+        # insert tail record
+        offset = self.table.page_ranges[-1].tail_pages[-1].write(record)
+        tail_page_index = len(self.table.page_ranges[-1].tail_pages) - 1
+        page_range_index = len(self.table.page_ranges) - 1
+
+        # add new location to page directory
+        self.table.page_directory[lineage[0].rid].append([page_range_index, tail_page_index, offset])
+
+        # update tail rid
+        self.update_tail_rid()
+
+        return True
         pass
     
     
@@ -155,8 +197,8 @@ class Query:
         # Create new record
         record = Record(lineage[0].rid, "t" + str(self.current_tail_rid), time.time(), [1 if update is not None else orig for orig, update in zip(lineage[0].schema_encoding, [lineage[-1].columns[0], *columns])], [upd if upd is not None else orig for orig, upd in zip(lineage[-1].columns, [lineage[-1].columns[0], *columns])])
         # Update old records
-        lineage[0].schema_encoding = record.schema_encoding
-        lineage[-1].indirection = record.rid
+        lineage[0].schema_encoding = record.schema_encoding # update base record's schema encoding
+        lineage[-1].indirection = record.rid   # tail record's rid
         
         # Make sure space exists
         self.table.index.add_record(record)
