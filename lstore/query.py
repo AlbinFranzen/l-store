@@ -38,7 +38,6 @@ class Query:
     def delete(self, primary_key):
         pass
     
-    
     """
     # Insert a record with specified columns
     # Return True upon succesful insertion
@@ -133,7 +132,20 @@ class Query:
     # RELATIVE_VERSION USAGE: (-1, -2, etc)
     """
     def select_version(self, search_key, search_key_index, projected_columns_index, relative_version):
-        pass
+        records = self.select(search_key, search_key_index, projected_columns_index)
+        lineages = []
+        for record in records:
+            lineages.append(self._traverse_lineage(record.rid))
+        
+        results = []
+        for lineage in lineages:
+            try:
+                record = lineage[relative_version]
+            except IndexError:
+                return False
+            results.append(record)
+        return results
+            
 
     
     """
