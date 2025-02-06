@@ -92,7 +92,7 @@ class Query:
             return False
         
         # Create record
-        record = Record(None, "b" + str(self.current_base_rid), time.time(), [0] * (sum(1 for _ in (*columns,)) + 1), [self.current_key, *columns])
+        record = Record(None, f"b{self.current_base_rid}", time.time(), [0] * (len(columns) + 1), [self.current_key, *columns])
         
         # Make sure space exists
         self.table.index.add_record(record)
@@ -107,7 +107,7 @@ class Query:
         page_range_index = len(self.table.page_ranges) - 1 
         
         # Add new location to page directory 
-        self.table.page_directory["b" + str(self.current_base_rid)] = [[page_range_index, base_page_index, offset]]
+        self.table.page_directory[f"b{self.current_base_rid}"] = [[page_range_index, base_page_index, offset]]
         self.current_base_rid += 1
         return True
     
@@ -134,31 +134,29 @@ class Query:
         if rid_list == False:
             return False
         # Get the corresponding records
-        records = []
-        for rid in rid_list:   
-            records.append(self._traverse_lineage(rid)[-1])
+        records = [self._traverse_lineage(rid)[-1] for rid in rid_list]
 
         # Convert records to only have the projected columns
         output_records = []
-        for record in records:
-            if sum(projected_columns_index) == len(projected_columns_index):
-                output_records.append(record)
-                continue    
-            new_record = Record(record.rid, record.indirection, record.time_stamp, record.schema_encoding, [record.columns[i+1] for i in range(len(record.columns)-1) if projected_columns_index[i] == 1])
+        if all(projected_columns_index):
+            return records   
+        for record in records:   
+            new_record = Record(record.rid, record.indirection, record.time_stamp, record.schema_encoding, [col for col, include in zip(record.columns[1:], projected_columns_index) if include])
             output_records.append(new_record)     
         return output_records
     
     # Get list of records from base_rid
     def _traverse_lineage(self, base_rid):
-        lineage = [] 
-        for i in range(len(self.table.page_directory[base_rid])):
-            page_range_index, page_index, offset  = self.table.page_directory[base_rid][i]
-            if i != 0: # Iterate through tail pages or base pages
-                current_record = self.table.page_ranges[page_range_index].tail_pages[page_index].read_index(offset) 
-            else:
-                current_record = self.table.page_ranges[page_range_index].base_pages[page_index].read_index(offset) 
+        lineage = []
+        page_entries = self.table.page_directory[base_rid]
+        for i, (page_range_index, page_index, offset) in enumerate(page_entries): # Loop through the page entries
+            page_range = self.table.page_ranges[page_range_index]
+            if i == 0: # First record comes from the base page.   
+                current_record = page_range.base_pages[page_index].read_index(offset)
+            else: # Subsequent records come from tail pages.
+                current_record = page_range.tail_pages[page_index].read_index(offset)        
             lineage.append(current_record)
-            if current_record.indirection == None or current_record.indirection == base_rid: 
+            if current_record.indirection is None or current_record.indirection == base_rid:
                 break
         return lineage
     
@@ -187,8 +185,6 @@ class Query:
                 return False
             results.append(record)
         return results
-            
-
     
     """
     # Update a record with specified key and columns
