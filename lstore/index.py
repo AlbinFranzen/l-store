@@ -47,7 +47,15 @@ class Index:
     # Returns the RIDs of all records with values in column "column" between "begin" and "end"
     """
     def locate_range(self, begin, end, column):
-        pass
+        rids = [] # List to hold RIDs
+
+        #use locate and iterate through all values between begin and end
+        for val in range(begin, end+1):
+            result = locate(column, val)
+            if result:
+                rids.extend(result)
+            
+        return rids
 
 
 
