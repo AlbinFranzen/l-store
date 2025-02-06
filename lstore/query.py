@@ -175,7 +175,29 @@ class Query:
     # RELATIVE_VERSION USAGE: (-1, -2, etc)
     """
     def select_version(self, search_key, search_key_index, projected_columns_index, relative_version):
-        pass
+        rid_list = self.table.index.locate(search_key_index, search_key)
+        if rid_list == False:
+            return False
+        
+        records = []
+        for rid in rid_list:  
+            lineage = self._traverse_lineage(rid)
+
+            if abs(relative_version) > len(lineage):
+                continue
+
+            records.append(lineage[relative_version])
+
+        output_records = []
+        for record in records:
+            if sum(projected_columns_index) == len(projected_columns_index):
+                output_records.append(record)
+                continue    
+
+            new_record = Record(record.rid, record.indirection, record.time_stamp, record.schema_encoding, [record.columns[i+1] for i in range(len(record.columns)-1) if projected_columns_index[i] == 1])
+            output_records.append(new_record)     
+        return output_records
+
 
     
     """
@@ -227,20 +249,20 @@ class Query:
     # Returns False if no record exists in the given range
     """
     def sum(self, start_range, end_range, aggregate_column_index):
-        total_sum = 0
+        range_sum = 0
         record_exists = False
-        for primary_key in range(start_range, end_range + 1):
-            if primary_key in self.table.page_directory:
-                record = self.index.get_record(primary_key)
-                total_sum += record.columns[aggregate_column_index]
-                record_exists = True
+        key_range = self.index.locate_range(start_range, end_range)
+
+        for primary_key in key_range:
+            record = self.index.get_record(primary_key)
+            range_sum += record.columns[aggregate_column_index]
+            record_exists = True
+
         if record_exists:
-            return total_sum
+            return range_sum
         else:
             return False
         
-        pass
-
     
     """
     :param start_range: int         # Start of the key range to aggregate 
@@ -252,7 +274,26 @@ class Query:
     # Returns False if no record exists in the given range
     """
     def sum_version(self, start_range, end_range, aggregate_column_index, relative_version):
-        pass
+        range_sum = 0
+        record_exists = False
+        key_range = self.index.locate_range(start_range, end_range)
+
+        #traverse tree for each key found in range
+        for primary_key in key_range:
+            lineage = self._traverse_lineage(primary_key)
+            
+            #checks to make sure version exists
+            if abs(relative_version) > len(lineage):
+                continue
+
+            record = lineage[relative_version]
+            range_sum += record.columns[aggregate_column_index]
+            record_exists = True
+
+        if record_exists:
+            return range_sum
+        else:
+            return False
 
     
     """
