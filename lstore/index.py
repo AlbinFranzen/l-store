@@ -1,6 +1,5 @@
 import bisect
-from bplustree import BPlusTree
-
+from bplustree.tree import BPlusTree
 """
 A data strucutre hoxlding indices for various columns of a table. Key column should be indexd by default, other columns can be indexed through this object. Indices are usually B-Trees, but other data structures can be used as well.
 """
