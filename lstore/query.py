@@ -266,11 +266,11 @@ class Query:
     def sum_version(self, start_range, end_range, aggregate_column_index, relative_version):
         range_sum = 0
         record_exists = False
-        key_range = self.index.locate_range(start_range, end_range)
+        rids = self.index.locate_range(start_range, end_range, 0)
 
-        #traverse tree for each key found in range
-        for primary_key in key_range:
-            lineage = self._traverse_lineage(primary_key)
+        #traverse tree for each rid found in range
+        for rid in rids:
+            lineage = self._traverse_lineage(rid)
             
             #checks to make sure version exists
             if abs(relative_version) > len(lineage):
