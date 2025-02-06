@@ -80,7 +80,6 @@ class Query:
         return True
         pass
     
-    
     """
     # Insert a record with specified columns
     # Return True upon succesful insertion
@@ -175,29 +174,20 @@ class Query:
     # RELATIVE_VERSION USAGE: (-1, -2, etc)
     """
     def select_version(self, search_key, search_key_index, projected_columns_index, relative_version):
-        rid_list = self.table.index.locate(search_key_index, search_key)
-        if rid_list == False:
-            return False
-        
-        records = []
-        for rid in rid_list:  
-            lineage = self._traverse_lineage(rid)
-
-            if abs(relative_version) > len(lineage):
-                continue
-
-            records.append(lineage[relative_version])
-
-        output_records = []
+        records = self.select(search_key, search_key_index, projected_columns_index)
+        lineages = []
         for record in records:
-            if sum(projected_columns_index) == len(projected_columns_index):
-                output_records.append(record)
-                continue    
-
-            new_record = Record(record.rid, record.indirection, record.time_stamp, record.schema_encoding, [record.columns[i+1] for i in range(len(record.columns)-1) if projected_columns_index[i] == 1])
-            output_records.append(new_record)     
-        return output_records
-
+            lineages.append(self._traverse_lineage(record.rid))
+        
+        results = []
+        for lineage in lineages:
+            try:
+                record = lineage[relative_version]
+            except IndexError:
+                return False
+            results.append(record)
+        return results
+            
 
     
     """
@@ -276,11 +266,11 @@ class Query:
     def sum_version(self, start_range, end_range, aggregate_column_index, relative_version):
         range_sum = 0
         record_exists = False
-        key_range = self.index.locate_range(start_range, end_range)
+        rids = self.index.locate_range(start_range, end_range, 0)
 
-        #traverse tree for each key found in range
-        for primary_key in key_range:
-            lineage = self._traverse_lineage(primary_key)
+        #traverse tree for each rid found in range
+        for rid in rids:
+            lineage = self._traverse_lineage(rid)
             
             #checks to make sure version exists
             if abs(relative_version) > len(lineage):
