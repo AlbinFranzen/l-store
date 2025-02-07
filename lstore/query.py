@@ -182,10 +182,10 @@ class Query:
         
         results = []
         for lineage in lineages:
-            try:
+            if abs(relative_version) > len(lineage):
+                record = lineage[0]
+            else:
                 record = lineage[relative_version]
-            except IndexError:
-                return False
             results.append(record)
         return results
     
