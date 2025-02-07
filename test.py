@@ -2,8 +2,9 @@ from lstore.table import Table
 from lstore.query import Query
 
 test_table = Table("test_table", 3, 0)
-query = Query(test_table)
+print(query)
 query.insert(5, 2, 3)
+print(test_table)
 query.update(0, None, 10, 10)
 query.update(0, 7, 5, None)
 #print(query.table.page_ranges[0].base_pages[0].read_index(0).indirection)

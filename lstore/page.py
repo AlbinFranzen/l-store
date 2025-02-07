@@ -5,6 +5,9 @@ class Page:
         self.num_records = 0
         self.data = []
 
+    def __repr__(self):
+        return f"num_records: {self.num_records}  |  data: {self.data}"
+
     def has_capacity(self):  # Check if page has capacity
         return self.num_records < PAGE_RECORD_SIZE
 

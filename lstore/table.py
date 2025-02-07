@@ -17,6 +17,9 @@ class Record:
         self.schema_encoding = schema_encoding
         self.columns = columns
 
+    def __repr__(self):
+        return f"indirection: {self.indirection}  |  rid: {self.rid}  |  time_stamp: {self.time_stamp}  |  schema_encoding: {self.schema_encoding}  |  columns: {self.columns}"
+
 class Table:
     """
     :param name: string         #Table name
@@ -33,6 +36,8 @@ class Table:
         self.index = Index(self)
         pass
         
+    def __repr__(self):
+        return f"Name: {self.name}\nKey: {self.key}\nNum columns: {self.num_columns}\nPage_ranges: {self.page_ranges}\nPage_directory: {self.page_directory}\nindex: {self.index}"
 
     def __merge(self):
         print("merge is happening")

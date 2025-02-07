@@ -8,6 +8,9 @@ class PageRange:
         self.tail_pages = [Page()]
         self.max_base_pages = PAGE_RANGE_SIZE  # amount defined in Milestone 1
 
+    def __repr__(self):
+        return f"\n\tbase pages:\n\t\t{self.base_pages} \n\ttail pages:\n\t\t{self.tail_pages}"
+
     # accessors
     def get_tail_pages(self):
         return self.tail_pages

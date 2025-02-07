@@ -21,6 +21,9 @@ class Query:
         self.current_key = 0
         pass
     
+    def __repr__(self):
+        return f"Table:\n{self.table}\ncurrent_base_rid: {self.current_base_rid}\ncurrent_tail_rid: {self.current_tail_rid}\ncurrent_key: {self.current_key}"
+    
     def update_base_rid(self):
         self.current_base_rid += 1
         pass
@@ -237,7 +240,7 @@ class Query:
     def sum(self, start_range, end_range, aggregate_column_index):
         range_sum = 0
         record_exists = False
-        key_range = self.index.locate_range(start_range, end_range)
+        key_range = self.table.index.locate_range(start_range, end_range, aggregate_column_index)
 
         for primary_key in key_range:
             record = self.index.get_record(primary_key)
