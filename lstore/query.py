@@ -18,11 +18,10 @@ class Query:
         self.table = table
         self.current_base_rid = 0
         self.current_tail_rid = 0
-        self.current_key = 0
         pass
     
     def __repr__(self):
-        return f"Table:\n{self.table}\ncurrent_base_rid: {self.current_base_rid}\ncurrent_tail_rid: {self.current_tail_rid}\ncurrent_key: {self.current_key}"
+        return f"Table:\n{self.table}\ncurrent_base_rid: {self.current_base_rid}\ncurrent_tail_rid: {self.current_tail_rid}"
     
     def update_base_rid(self):
         self.current_base_rid += 1
@@ -95,7 +94,7 @@ class Query:
             return False
         
         # Create record
-        record = Record(None, f"b{self.current_base_rid}", time.time(), [0] * (len(columns) + 1), [self.current_key, *columns])
+        record = Record(None, f"b{self.current_base_rid}", time.time(), [0] * len(columns), [*columns])
         
         # Make sure space exists
         self.table.index.add_record(record)
@@ -133,7 +132,6 @@ class Query:
     def select(self, search_key, search_key_index, projected_columns_index):
         # Get the base rids of the records with the search key
         rid_list = self.table.index.locate(search_key_index, search_key)
-        rid_list = ["b0"]
         if rid_list == False:
             return False
         # Get the corresponding records
@@ -144,7 +142,7 @@ class Query:
         if all(projected_columns_index):
             return records   
         for record in records:   
-            new_record = Record(record.rid, record.indirection, record.time_stamp, record.schema_encoding, [col for col, include in zip(record.columns[1:], projected_columns_index) if include])
+            new_record = Record(record.rid, record.indirection, record.time_stamp, record.schema_encoding, [col for col, include in zip(record.columns, projected_columns_index) if include])
             output_records.append(new_record)     
         return output_records
     
@@ -176,6 +174,8 @@ class Query:
     """
     def select_version(self, search_key, search_key_index, projected_columns_index, relative_version):
         records = self.select(search_key, search_key_index, projected_columns_index)
+        if records == False:
+            return False
         lineages = []
         for record in records:
             lineages.append(self._traverse_lineage(record.rid))
@@ -198,15 +198,16 @@ class Query:
     def update(self, primary_key, *columns):
         # Get the rids of the records with the primary key
         base_rid = self.table.index.locate(0, primary_key)
-        base_rid = ["b0"]
+        print(base_rid)
         if base_rid == False:
             return False
         
         # Get all records in lineage
         lineage = self._traverse_lineage(base_rid[0])
         
+        
         # Create new record
-        record = Record(lineage[0].rid, "t" + str(self.current_tail_rid), time.time(), [1 if update is not None else orig for orig, update in zip(lineage[0].schema_encoding, [lineage[-1].columns[0], *columns])], [upd if upd is not None else orig for orig, upd in zip(lineage[-1].columns, [lineage[-1].columns[0], *columns])])
+        record = Record(lineage[0].rid, "t" + str(self.current_tail_rid), time.time(), [1 if update is not None else orig for orig, update in zip(lineage[0].schema_encoding, [*columns])], [upd if upd is not None else orig for orig, upd in zip(lineage[-1].columns, [*columns])])
         # Update old records
         lineage[0].schema_encoding = record.schema_encoding # update base record's schema encoding
         lineage[-1].indirection = record.rid   # tail record's rid

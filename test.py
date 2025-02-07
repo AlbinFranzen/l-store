@@ -2,13 +2,14 @@ from lstore.table import Table
 from lstore.query import Query
 
 test_table = Table("test_table", 3, 0)
-print(query)
-query.insert(5, 2, 3)
-print(test_table)
-query.update(0, None, 10, 10)
-query.update(0, 7, 5, None)
-#print(query.table.page_ranges[0].base_pages[0].read_index(0).indirection)
-#print(query.table.page_directory)
+query = Query(test_table)
+query.insert(50, 2, 3)
+print(query.table.index.locate(0, 50))
+#
+#query.update(50, None, 10)
+#query.update(50, 5, None)
+
+#print(query)
 #print(query._traverse_lineage("b0")[0].rid)
-print(query.select(5, 0, [1, 1, 1])[0].columns)
+#print(query.select(5, 0, [1, 1, 1])[0].columns)
 
