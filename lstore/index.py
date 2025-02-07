@@ -1,4 +1,5 @@
 import bisect
+from bplustree.tree import BPlusTree
 """
 A data strucutre hoxlding indices for various columns of a table. Key column should be indexd by default, other columns can be indexed through this object. Indices are usually B-Trees, but other data structures can be used as well.
 """
@@ -7,7 +8,10 @@ class Index:
     def __init__(self, table):
         # One index for each table. All our empty initially.
         self.indices = [None] *  table.num_columns
-        pass
+        for col in table.num_columns:
+            self.create_index(col)
+
+
 
     def __repr__(self):
         return f"indices: {self.indices}"
