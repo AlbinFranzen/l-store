@@ -1,4 +1,6 @@
 import bisect
+import os
+
 from bplustree.tree import BPlusTree
 """
 A data strucutre hoxlding indices for various columns of a table. Key column should be indexd by default, other columns can be indexed through this object. Indices are usually B-Trees, but other data structures can be used as well.
@@ -6,9 +8,9 @@ A data strucutre hoxlding indices for various columns of a table. Key column sho
 class Index:
 
     def __init__(self, table):
-        # One index for each table. All our empty initially.
+        # One index for each column in the table
         self.indices = [None] *  table.num_columns
-        for col in table.num_columns:
+        for col in range(table.num_columns):
             self.create_index(col)
 
 
@@ -29,9 +31,15 @@ class Index:
             keys_index = []  # List to hold matching record IDs
             column_index = self.indices[column]  # Use the pre-existing B+ Tree for the column
 
-            # Assuming column_index is a sorted dictionary or list of (rid, column_value)
-            sorted_values = column_index.items() # Convert to a sorted list of key-value pairs
+            try:
+                sorted_values = list(column_index.items())  # Convert generator to list
+            except RuntimeError as e:
+                print(f"Error: Unable to retrieve items from BPlusTree for column {column}: {e}")
+                return False  # Prevent crash
 
+            if not sorted_values:
+                print(f"Warning: Index for column {column} is empty.")
+                return False  # No values in index
             # Use bisect to find the first occurrence of the value
             index = bisect.bisect_left(sorted_values, value)
 
@@ -41,7 +49,7 @@ class Index:
                 index += 1
 
             primary_key_index = self.indices[0]  # primary key column
-            primary_keys = primary_key_index.items()
+            primary_keys = list(primary_key_index.items())
             return_keys = []
             for index in keys_index:
                 return_keys.append(primary_keys[index])
@@ -73,16 +81,18 @@ class Index:
     # optional: Create index on specific column
     """
     def create_index(self, column_number):
-        # Create a new B+ tree index for the given column number
-        column_index = BPlusTree(f"index_{column_number}.txt")
-
+        # Ensure column number is valid
         if column_number < 0 or column_number >= len(self.indices):
             print(f"Error: Column {column_number} is out of range. Cannot create an index.")
             return
 
+        # Ensure the index directory exists
+        index_dir = "indexes"
+        os.makedirs(index_dir, exist_ok=True)
+
         # Check if an index for this column already exists
-        if column_number not in self.indices:
-            self.indices[column_number] = column_index
+        if self.indices[column_number] is None:  # Corrected check
+            self.indices[column_number] = BPlusTree(os.path.join(index_dir, f"index_{column_number}.txt"))
             print(f"Index created for column {column_number}.")
         else:
             print(f"Index for column {column_number} already exists.")
@@ -95,6 +105,6 @@ class Index:
     def drop_index(self, column_number):
         self.indices[column_number] = None
         pass
-    
+
     def add_record(self, record):
         pass
