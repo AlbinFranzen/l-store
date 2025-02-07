@@ -34,7 +34,7 @@ class Index:
             try:
                 sorted_values = list(column_index.items())  # Convert generator to list
             except RuntimeError as e:
-                print(f"Error: Unable to retrieve items from BPlusTree for column {column}: {e}")
+                print(f"Error: BPlusTree empty for column {column}: {e}")
                 return False  # Prevent crash
 
             if not sorted_values:

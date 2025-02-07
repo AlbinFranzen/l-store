@@ -37,7 +37,7 @@ print("Insert finished")
 # Check inserted records using select query
 for key in records:
     # select function will return array of records 
-    # here we are sure that there is only one record in t hat array
+    # here we are sure that there is only one record in that array
     # check for retreiving version -1. Should retreive version 0 since only one version exists.
     record = query.select_version(key, 0, [1, 1, 1, 1, 1], -1)[0]
     error = False
