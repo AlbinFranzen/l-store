@@ -26,37 +26,16 @@ class Index:
       until the column values for the record do not match the desired value.
     """
     def locate(self, column, value):
-        if self.indices[column] is not None:  # Ensure the B+ Tree exists for the column
-            keys_index = []  # List to hold matching record IDs
+        if self.indices[column]:  # Ensure the B+ Tree exists for the column
             column_index = self.indices[column]  # Use the pre-existing B+ Tree for the column
-
-            try:
-                sorted_values = list(column_index.items())  # Convert generator to list
-            except RuntimeError as e:
-                print(f"Error: BPlusTree empty for column {column}: {e}")
-                return False  # Prevent crash
-
-            if not sorted_values:
-                print(f"Warning: Index for column {column} is empty.")
-                return False  # No values in index
-            # Use bisect to find the first occurrence of the value
-            index = bisect.bisect_left(sorted_values, value)
-
-            # If the value is found, collect all matching rids
-            while index < len(sorted_values) and sorted_values[index] == value:
-                keys_index.append(index)
-                index += 1
-
-            primary_key_index = self.indices[0]  # primary key column
-            primary_keys = list(primary_key_index.items())
-            return_keys = []
-            for index in keys_index:
-                return_keys.append(primary_keys[index])
-
-            # If primary key corresponding to desired column value exists
-            if return_keys:
-                return return_keys
-        return False  # Return False if no matching record is found
+            print(f"column index: {column_index}")
+            try:       
+                if column_index[value] is not None: # C.S. string of RIDs
+                    print(f"located value {column_index[value]}")
+                    return column_index[value].decode('utf-8')
+            except (IndexError, KeyError):
+                print("no matching record")
+                return False  # Return False if no matching record is found
 
 
 
@@ -64,16 +43,19 @@ class Index:
     # Returns the RIDs of all records with values in column "column" between "begin" and "end"
     """
     def locate_range(self, begin, end, column):
-        rids = [] # List to hold RIDs
-
-        #use locate and iterate through all values between begin and end
-        for val in range(begin, end+1):
-            result = self.locate(column, val)
-            if result:
-                rids.extend(result)
-            
-        return rids
-
+ 
+        rid_list = []
+        #get all values in range begin to end
+        rid_dict = self.indices[column][begin:end]
+        print(f"rid dictionary: {rid_dict}")
+        for key in rid_dict:
+            #appends rid value
+            rid_list.append(rid_dict[key].decode('utf-8'))
+        
+        if len(rid_list) == 0:
+            return False
+        else:
+            return rid_list
 
 
     """
@@ -95,6 +77,7 @@ class Index:
             print(f"Index created for column {column_number}.")
         else:
             print(f"Index for column {column_number} already exists.")
+        pass
 
 
 
@@ -107,8 +90,19 @@ class Index:
 
     def add_record(self, record):
         rid_str = record.rid
-        rid = int(rid_str[1:]) #(b/p)XXXX... = > XXXX
-        for index, value in zip(self.indices, vars(record).values()):
-            if value is not None:
-                index.insert(rid, value)
-
+        columns = list(record.columns)
+        #can make "for col in columns:"
+        for col in range(len(columns)):
+            rid_list = self.locate(col, columns[col])
+            #if list is empty
+            if not rid_list:
+                self.indices[col][columns[col]] = rid_str.encode('utf-8')
+            #else list is not empty
+            else:
+                current_rid_list = rid_list.decode('utf-8').split(',')
+                for key in rid_list:
+                    rid_str += (',' + (key))
+                self.indices[col][columns[col]] = rid_str.encode('utf-8')
+                
+                if columns[col] is not None:
+                    self.indices[col][columns[col]] = rid_str.encode('utf-8')
