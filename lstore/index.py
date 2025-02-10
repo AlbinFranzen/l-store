@@ -99,7 +99,7 @@ class Index:
                 self.indices[col][columns[col]] = rid_str.encode('utf-8')
             #else list is not empty
             else:
-                current_rid_list = rid_list.decode('utf-8').split(',')
+                rid_str = rid_list.decode('utf-8')
                 for key in rid_list:
                     rid_str += (',' + (key))
                 self.indices[col][columns[col]] = rid_str.encode('utf-8')
