@@ -1,7 +1,6 @@
 import bisect
 import os
-
-from bplustree.tree import BPlusTree
+from lstore.bplustree.tree import BPlusTree
 """
 A data strucutre hoxlding indices for various columns of a table. Key column should be indexd by default, other columns can be indexed through this object. Indices are usually B-Trees, but other data structures can be used as well.
 """
@@ -107,4 +106,9 @@ class Index:
         pass
 
     def add_record(self, record):
-        pass
+        rid_str = record.rid
+        rid = int(rid_str[1:]) #(b/p)XXXX... = > XXXX
+        for index, value in zip(self.indices, vars(record).values()):
+            if value is not None:
+                index.insert(rid, value)
+

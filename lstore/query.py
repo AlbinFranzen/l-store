@@ -240,19 +240,17 @@ class Query:
     """
     def sum(self, start_range, end_range, aggregate_column_index):
         range_sum = 0
-        record_exists = False
-        key_range = self.table.index.locate_range(start_range, end_range, aggregate_column_index)
-
-        for primary_key in key_range:
-            record = self.index.get_record(primary_key)
-            range_sum += record.columns[aggregate_column_index]
-            record_exists = True
-
-        if record_exists:
-            return range_sum
-        else:
+        rids = self.table.index.locate_range(start_range, end_range, aggregate_column_index)
+        if rids == False:
+            print("Given range does not exist")
             return False
-        
+
+        for rid in rids:
+            page_range, page_index, offset = self.table.page_directory[rid][-1]
+            record = self.table.page_ranges[page_range].tail_pages[page_index].read_index(offset)
+            range_sum += record.columns[aggregate_column_index]
+
+        return range_sum        
     
     """
     :param start_range: int         # Start of the key range to aggregate 
@@ -266,8 +264,11 @@ class Query:
     def sum_version(self, start_range, end_range, aggregate_column_index, relative_version):
         range_sum = 0
         record_exists = False
-        rids = self.index.locate_range(start_range, end_range, 0)
-
+        rids = self.table.index.locate_range(start_range, end_range, aggregate_column_index)
+        if rid == False:
+            print("Given range does not exist")
+            return False
+        
         #traverse tree for each rid found in range
         for rid in rids:
             lineage = self._traverse_lineage(rid)
