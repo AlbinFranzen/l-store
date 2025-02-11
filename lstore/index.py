@@ -43,10 +43,9 @@ class Index:
     # Returns the RIDs of all records with values in column "column" between "begin" and "end"
     """
     def locate_range(self, begin, end, column):
- 
         rid_list = []
         #get all values in range begin to end
-        rid_dict = self.indices[column][begin:end]
+        rid_dict = self.indices[column][begin:end+1]
         for key in rid_dict:
             #appends rid value
             rid_list.append(rid_dict[key].decode('utf-8'))
@@ -93,7 +92,6 @@ class Index:
         columns = list(record.columns)
         #can make "for col in columns:"
         for col in range(len(columns)):
-            print(record.columns, col, columns[col])
             if columns[col] == None:
                 continue
             rid_str = self.locate(col, columns[col])
