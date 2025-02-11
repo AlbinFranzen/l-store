@@ -1,4 +1,4 @@
-from lstore.config import PAGE_RECORD_SIZE
+from config import PAGE_RECORD_SIZE
 
 class Page:
     def __init__(self):
@@ -13,7 +13,7 @@ class Page:
 
     def write(self, record):  # Append record
         if not self.has_capacity():
-            print("Maximum capacity of PAGE_RECORD_SIZE records has been reached.")
+            # print("Maximum capacity of PAGE_RECORD_SIZE records has been reached.")
             return
         self.data.append(record)
         self.num_records += 1

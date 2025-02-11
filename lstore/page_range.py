@@ -1,5 +1,5 @@
-from lstore.page import Page
-from lstore.config import *
+from page import Page
+from config import *
 
 # structure that defines list of valid base and tail pages
 class PageRange:
