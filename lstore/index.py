@@ -44,16 +44,17 @@ class Index:
     """
     def locate_range(self, begin, end, column):
         rid_list = []
-        #get all values in range begin to end
-        rid_dict = self.indices[column][begin:end]
+        # Get all values in range begin to end (inclusive)
+        rid_dict = self.indices[column][begin:end + 1]  # Note the +1 to include the end value
+        
+        if not rid_dict:
+            return False
+        
         for key in rid_dict:
-            #appends rid value
+            # Appends rid value
             rid_list.append(rid_dict[key].decode('utf-8'))
         
-        if len(rid_list) == 0:
-            return False
-        else:
-            return rid_list
+        return rid_list if rid_list else False
 
 
     """

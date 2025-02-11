@@ -284,17 +284,23 @@ class Query:
     # Returns False if no record exists in the given range
     """
     def sum(self, start_range, end_range, aggregate_column_index):
-        range_sum = 0
+        # Get all RIDs in the range (inclusive)
         rid_combined_strings = self.table.index.locate_range(start_range, end_range, 0)
         if rid_combined_strings == False:
             return False
-        rids = [item for s in rid_combined_strings for item in s.split(",")]
         
-        # Merge the lineage
-        records = []
+        # Flatten the list of RIDs and split any combined RID strings
+        rids = []
+        for rid_string in rid_combined_strings:
+            rids.extend(rid_string.split(","))
+        
+        range_sum = 0
+        # Get the merged record for each RID and add the specified column value
         for rid in rids:
-            merged_record = self._get_merged_lineage(rid, [1]*self.table.num_columns)
-            range_sum += merged_record.columns[aggregate_column_index]
+            merged_record = self._get_merged_lineage(rid, [1] * self.table.num_columns)
+            if merged_record and merged_record.columns[aggregate_column_index] is not None:
+                range_sum += merged_record.columns[aggregate_column_index]
+            
         return range_sum
       
     
