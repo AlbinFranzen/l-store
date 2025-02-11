@@ -134,9 +134,14 @@ class Query:
         rid_list = self.table.index.locate(search_key_index, search_key)
         if rid_list == False:
             return False
-        # Get the corresponding records
-        records = [self._traverse_lineage(rid)[-1] for rid in rid_list]
+        records = []
+        rid_list = rid_list.split(",")
+        for rid in rid_list:
+            print("RID: " + rid)
+            records.append(self._traverse_lineage(rid))
 
+
+        # Convert record
         # Convert records to only have the projected columns
         output_records = []
         if all(projected_columns_index):
@@ -149,9 +154,16 @@ class Query:
     # Get list of records from base_rid
     def _traverse_lineage(self, base_rid):
         lineage = []
-        print("PAGE ENTRY: " + page_entries)
-        page_entries = (self.table.page_directory[base_rid])
-        print("PAGE ENTRY: " + page_entries)
+        print("BASE RID: " + base_rid)
+        if isinstance(base_rid, bytes):
+            base_rid = base_rid.decode()  # Ensure base_rid is a string
+
+        if base_rid not in self.table.page_directory:
+            print(f"Error: base_rid {base_rid} not found in page_directory")
+            return []
+
+        page_entries = self.table.page_directory[base_rid]
+
         for i, (page_range_index, page_index, offset) in enumerate(page_entries): # Loop through the page entries
             page_range = self.table.page_ranges[page_range_index]
             if i == 0: # First record comes from the base page.   
@@ -175,22 +187,23 @@ class Query:
     # RELATIVE_VERSION USAGE: (-1, -2, etc)
     """
     def select_version(self, search_key, search_key_index, projected_columns_index, relative_version):
-        records = self.select(search_key, search_key_index, projected_columns_index)
-        if records == False:
+        record_lineages = self.select(search_key, search_key_index, projected_columns_index)
+        if not record_lineages:
             return False
-        lineages = []
-        for record in records:
-            lineages.append(self._traverse_lineage(record.rid))
-        
+
+        # Here, each element in record_lineages is already a lineage (a list of records)
         results = []
-        for lineage in lineages:
+        for lineage in record_lineages:
+            print("RECORD: ", lineage[0].rid)  # Debug print base record's rid
+            # Use relative_version to choose the record from the lineage.
             if abs(relative_version) > len(lineage):
                 record = lineage[0]
             else:
                 record = lineage[relative_version]
             results.append(record)
         return results
-    
+
+
     """
     # Update a record with specified key and columns
     # Returns True if update is succesful
@@ -200,8 +213,14 @@ class Query:
     def update(self, primary_key, *columns):
         # Get the rids of the records with the primary key
         base_rid = self.table.index.locate(0, primary_key)
+        if base_rid is False:
+            return False
+
+        base_rid = base_rid[0]  # Extract first element from the list
+        if isinstance(base_rid, bytes):
+            base_rid = base_rid.decode()  # Decode byte string to regular string
         print(base_rid)
-        if base_rid == False:
+        if not base_rid:
             return False
         
         # Get all records in lineage
