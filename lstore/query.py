@@ -149,7 +149,9 @@ class Query:
     # Get list of records from base_rid
     def _traverse_lineage(self, base_rid):
         lineage = []
-        page_entries = self.table.page_directory[base_rid]
+        print("PAGE ENTRY: " + page_entries)
+        page_entries = (self.table.page_directory[base_rid])
+        print("PAGE ENTRY: " + page_entries)
         for i, (page_range_index, page_index, offset) in enumerate(page_entries): # Loop through the page entries
             page_range = self.table.page_ranges[page_range_index]
             if i == 0: # First record comes from the base page.   
@@ -265,7 +267,7 @@ class Query:
         range_sum = 0
         record_exists = False
         rids = self.table.index.locate_range(start_range, end_range, aggregate_column_index)
-        if rid == False:
+        if rids == False:
             print("Given range does not exist")
             return False
         

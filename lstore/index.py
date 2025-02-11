@@ -9,6 +9,7 @@ class Index:
     def __init__(self, table):
         # One index for each column in the table
         self.indices = [None] *  table.num_columns
+        self.table_name = table.name
         for col in range(table.num_columns):
             self.create_index(col)
 
@@ -71,13 +72,17 @@ class Index:
         index_dir = "indexes"
         os.makedirs(index_dir, exist_ok=True)
 
-        # Check if an index for this column already exists
-        if self.indices[column_number] is None:  # Corrected check
-            self.indices[column_number] = BPlusTree(os.path.join(index_dir, f"index_{column_number}.txt"))
-            print(f"Index created for column {column_number}.")
-        else:
-            print(f"Index for column {column_number} already exists.")
-        pass
+        # Define the index file path
+        index_file = os.path.join(index_dir, f"{self.table_name}_index_{column_number}.txt")
+
+        # Check if a previous index file exists and delete it
+        if os.path.exists(index_file):
+            os.remove(index_file)
+            print(f"Deleted old index file: {index_file}")
+
+        # Create a new index
+        self.indices[column_number] = BPlusTree(index_file, order=75)
+        print(f"Index created for column {column_number}.")
 
 
 
