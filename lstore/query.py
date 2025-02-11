@@ -131,24 +131,30 @@ class Query:
     """
     def select(self, search_key, search_key_index, projected_columns_index):
         # Get the base rids of the records with the search key
-        rid_list = self.table.index.locate(search_key_index, search_key)
-        if rid_list == False:
+        rid_combined_string = self.table.index.locate(search_key_index, search_key)
+        if rid_combined_string == False:
             return False
+        rid_list = rid_combined_string.split(",")
+        
+        # Merge the lineage
         records = []
-        rid_list = rid_list.split(",")
         for rid in rid_list:
-            records.append(self._traverse_lineage(rid))
-
-
-        # Convert record
-        # Convert records to only have the projected columns
-        output_records = []
-        if all(projected_columns_index):
-            return records   
-        for record in records:   
-            new_record = Record(record.rid, record.indirection, record.time_stamp, record.schema_encoding, [col for col, include in zip(record.columns, projected_columns_index) if include])
-            output_records.append(new_record)     
-        return output_records
+            new_record = self._get_merged_lineage(rid)
+            records.append(new_record)
+        
+        return records 
+    
+    def _get_merged_lineage(self, base_rid):   
+        lineage = self._traverse_lineage(base_rid)
+        base_values = list(lineage[0].columns)
+        for record in lineage:
+            new_values = record.columns
+            for val in range(len(new_values)):
+                if new_values[val] != None:
+                    base_values[val] = new_values[val]
+        new_record = Record(lineage[0].rid, lineage[0].indirection, record.time_stamp, record.schema_encoding, base_values)
+        return new_record
+   
     
     # Get list of records from base_rid
     def _traverse_lineage(self, base_rid):
@@ -268,16 +274,19 @@ class Query:
     """
     def sum(self, start_range, end_range, aggregate_column_index):
         range_sum = 0
-        rids = self.table.index.locate_range(start_range, end_range, aggregate_column_index)
-        if rids == False:
+        rid_combined_strings = self.table.index.locate_range(start_range, end_range, aggregate_column_index)
+        if rid_combined_strings == False:
             return False
-
+        rids = [item for s in rid_combined_strings for item in s.split(",")]
+        
+        # Merge the lineage
+        records = []
         for rid in rids:
-            page_range, page_index, offset = self.table.page_directory[rid][-1]
-            record = self.table.page_ranges[page_range].tail_pages[page_index].read_index(offset)
-            range_sum += record.columns[aggregate_column_index]
-
-        return range_sum        
+            merged_record = self._get_merged_lineage(rid)
+            range_sum += merged_record.columns[aggregate_column_index]
+        
+        return range_sum
+      
     
     """
     :param start_range: int         # Start of the key range to aggregate 
@@ -289,8 +298,7 @@ class Query:
     # Returns False if no record exists in the given range
     """
     def sum_version(self, start_range, end_range, aggregate_column_index, relative_version):
-        range_sum = 0
-        record_exists = False
+        range_sum = 0    
         rids = self.table.index.locate_range(start_range, end_range, aggregate_column_index)
         if rids == False:
             return False
@@ -298,19 +306,17 @@ class Query:
         #traverse tree for each rid found in range
         for rid in rids:
             lineage = self._traverse_lineage(rid)
-            
-            #checks to make sure version exists
+            print(lineage)
             if abs(relative_version) > len(lineage):
+                record = lineage[0]
+            else:
+                record = lineage[relative_version]
+            if record.columns[aggregate_column_index] is None:
                 continue
-
-            record = lineage[relative_version]
             range_sum += record.columns[aggregate_column_index]
-            record_exists = True
-
-        if record_exists:
-            return range_sum
-        else:
-            return False
+        
+        return range_sum
+      
 
     
     """
