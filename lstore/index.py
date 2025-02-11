@@ -45,7 +45,7 @@ class Index:
     def locate_range(self, begin, end, column):
         rid_list = []
         #get all values in range begin to end
-        rid_dict = self.indices[column][begin:end]
+        rid_dict = self.indices[column][begin:end+1]
         for key in rid_dict:
             #appends rid value
             rid_list.append(rid_dict[key].decode('utf-8'))

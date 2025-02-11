@@ -139,12 +139,12 @@ class Query:
         # Merge the lineage
         records = []
         for rid in rid_list:
-            new_record = self._get_merged_lineage(rid)
+            new_record = self._get_merged_lineage(rid, projected_columns_index)
             records.append(new_record)
         
         return records 
     
-    def _get_merged_lineage(self, base_rid):   
+    def _get_merged_lineage(self, base_rid, projected_columns_index):  
         lineage = self._traverse_lineage(base_rid)
         base_values = list(lineage[0].columns)
         for record in lineage:
@@ -152,7 +152,7 @@ class Query:
             for val in range(len(new_values)):
                 if new_values[val] != None:
                     base_values[val] = new_values[val]
-        new_record = Record(lineage[0].rid, lineage[0].indirection, record.time_stamp, record.schema_encoding, base_values)
+        new_record = Record(lineage[0].rid, lineage[0].indirection, record.time_stamp, record.schema_encoding, [element for element, bit in zip(base_values, projected_columns_index) if bit == 1])
         return new_record
    
     
@@ -223,12 +223,6 @@ class Query:
         if not base_rid:
             return False
 
-        # Get all records in lineage
-        
-        # Create new record
-        # Ensure lineage has records before proceeding
-
-
         lineage = self._traverse_lineage(base_rid)
         if not lineage:
             return False  # or handle this appropriately
@@ -251,7 +245,6 @@ class Query:
             self.table.page_ranges.append(PageRange())
         if not self.table.page_ranges[-1].tail_pages[-1].has_capacity(): # If base page is full, create new one
             self.table.page_ranges[-1].tail_pages.append(Page())
-        self.table.index.add_record(record)
             
         # Write and get location 
         offset = self.table.page_ranges[-1].tail_pages[-1].write(record) 
@@ -274,7 +267,7 @@ class Query:
     """
     def sum(self, start_range, end_range, aggregate_column_index):
         range_sum = 0
-        rid_combined_strings = self.table.index.locate_range(start_range, end_range, aggregate_column_index)
+        rid_combined_strings = self.table.index.locate_range(start_range, end_range, 0)
         if rid_combined_strings == False:
             return False
         rids = [item for s in rid_combined_strings for item in s.split(",")]
@@ -282,9 +275,8 @@ class Query:
         # Merge the lineage
         records = []
         for rid in rids:
-            merged_record = self._get_merged_lineage(rid)
+            merged_record = self._get_merged_lineage(rid, [1]*self.table.num_columns)
             range_sum += merged_record.columns[aggregate_column_index]
-        
         return range_sum
       
     
@@ -299,14 +291,13 @@ class Query:
     """
     def sum_version(self, start_range, end_range, aggregate_column_index, relative_version):
         range_sum = 0    
-        rids = self.table.index.locate_range(start_range, end_range, aggregate_column_index)
+        rids = self.table.index.locate_range(start_range, end_range, 0)
         if rids == False:
             return False
         
         #traverse tree for each rid found in range
         for rid in rids:
             lineage = self._traverse_lineage(rid)
-            print(lineage)
             if abs(relative_version) > len(lineage):
                 record = lineage[0]
             else:
