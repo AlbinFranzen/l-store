@@ -204,10 +204,10 @@ class Query:
         results = []
         for rid in rid_list:
             lineage = self._traverse_lineage(rid)
-            if relative_version < 0:
-                target_index = min(len(lineage) + relative_version, len(lineage)-1)
+            if relative_version - 1 < 0:
+                target_index = min(len(lineage) + relative_version - 1, len(lineage)-1)
             else:
-                target_index = relative_version
+                target_index = relative_version - 1
 
             # Start with the base record's columns (assumed to be in record_list[0])
             merged_columns = list(lineage[0].columns)
@@ -322,13 +322,24 @@ class Query:
         #traverse tree for each rid found in range
         for rid in rids:
             lineage = self._traverse_lineage(rid)
-            if abs(relative_version) > len(lineage):
-                record = lineage[0]
+            if relative_version - 1 < 0:
+                target_index = min(len(lineage) + relative_version - 1, len(lineage)-1)
             else:
-                record = lineage[relative_version]
-            if record.columns[aggregate_column_index] is None:
+                target_index = relative_version - 1
+            
+            # Start with the base record's columns (assumed to be in record_list[0])
+            merged_columns = list(lineage[0].columns)
+
+            # Merge updates from record_list[1] through record_list[target_index] (inclusive)
+            for record in lineage[1:target_index + 1]:
+                for i, value in enumerate(list(record.columns)):
+                    if value is not None:
+                        merged_columns[i] = value
+                        
+            record = lineage[target_index]
+            if merged_columns[aggregate_column_index] is None:
                 continue
-            range_sum += record.columns[aggregate_column_index]
+            range_sum += merged_columns[aggregate_column_index]
         
         return range_sum
       

@@ -71,9 +71,11 @@ for key in records:
             error = True
     if error:
         print('update error on', records[key], 'and', updated_columns, ':', record, ', correct:', records[key])
+        print("here")
     else:
         pass
         # print('update on', original, 'and', updated_columns, ':', record)
+        
 
     #check version -2 for record
     record = query.select_version(key, 0, [1, 1, 1, 1, 1], -2)[0]
@@ -85,7 +87,9 @@ for key in records:
         print('update error on', records[key], 'and', updated_columns, ':', record, ', correct:', records[key])
     else:
         pass
-        # print('update on', original, 'and', updated_columns, ':', record)
+        #print('update on', original, 'and', updated_columns, ':', record)¨
+        
+        
     
     #check version 0 for record
     record = query.select_version(key, 0, [1, 1, 1, 1, 1], 0)[0]
