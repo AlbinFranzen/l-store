@@ -27,15 +27,14 @@ class Index:
       until the column values for the record do not match the desired value.
     """
     def locate(self, column, value):
+        if value == None:
+            return False
         if self.indices[column]:  # Ensure the B+ Tree exists for the column
             column_index = self.indices[column]  # Use the pre-existing B+ Tree for the column
-            print(f"column index: {column_index}")
             try:       
                 if column_index[value] is not None: # C.S. string of RIDs
-                    print(f"located value {column_index[value]}")
                     return column_index[value].decode('utf-8')
             except (IndexError, KeyError):
-                print("no matching record")
                 return False  # Return False if no matching record is found
 
 
@@ -48,7 +47,6 @@ class Index:
         rid_list = []
         #get all values in range begin to end
         rid_dict = self.indices[column][begin:end]
-        print(f"rid dictionary: {rid_dict}")
         for key in rid_dict:
             #appends rid value
             rid_list.append(rid_dict[key].decode('utf-8'))
@@ -65,8 +63,7 @@ class Index:
     def create_index(self, column_number):
         # Ensure column number is valid
         if column_number < 0 or column_number >= len(self.indices):
-            print(f"Error: Column {column_number} is out of range. Cannot create an index.")
-            return
+            return False
 
         # Ensure the index directory exists
         index_dir = "indexes"
@@ -78,11 +75,9 @@ class Index:
         # Check if a previous index file exists and delete it
         if os.path.exists(index_file):
             os.remove(index_file)
-            print(f"Deleted old index file: {index_file}")
 
         # Create a new index
         self.indices[column_number] = BPlusTree(index_file, order=75)
-        print(f"Index created for column {column_number}.")
 
 
 
@@ -98,6 +93,9 @@ class Index:
         columns = list(record.columns)
         #can make "for col in columns:"
         for col in range(len(columns)):
+            print(record.columns, col, columns[col])
+            if columns[col] == None:
+                continue
             rid_str = self.locate(col, columns[col])
             #if list is empty
             if not rid_str:
