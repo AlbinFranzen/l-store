@@ -50,6 +50,7 @@ for key in records:
         pass
         print('select on', key, ':', record)
 
+print("UPDATE")
 updated_records = {}
 for key in records:
     updated_columns = [None, None, None, None, None]

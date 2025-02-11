@@ -211,24 +211,39 @@ class Query:
     # FOR TAIL PAGES
     """
     def update(self, primary_key, *columns):
+        print("update: ", primary_key)
         # Get the rids of the records with the primary key
         base_rid = self.table.index.locate(0, primary_key)
         if base_rid is False:
             return False
 
-        base_rid = base_rid[0]  # Extract first element from the list
         if isinstance(base_rid, bytes):
             base_rid = base_rid.decode()  # Decode byte string to regular string
         print(base_rid)
         if not base_rid:
             return False
-        
+        print("update: ", primary_key)
+
         # Get all records in lineage
-        lineage = self._traverse_lineage(base_rid[0])
-        
         
         # Create new record
-        record = Record(lineage[0].rid, "t" + str(self.current_tail_rid), time.time(), [1 if update is not None else orig for orig, update in zip(lineage[0].schema_encoding, [*columns])], [upd if upd is not None else orig for orig, upd in zip(lineage[-1].columns, [*columns])])
+        # Ensure lineage has records before proceeding
+
+
+        lineage = self._traverse_lineage(base_rid)
+        if not lineage:
+            print(f"Error: No lineage found for base_rid {base_rid}")
+            return False  # or handle this appropriately
+
+        # Now access lineage safely
+        record = Record(
+            lineage[0].rid,  # Base RID of lineage
+            "t" + str(self.current_tail_rid),
+            time.time(),
+            lineage[0].schema_encoding,  # Retain schema encoding
+            [None] * len(lineage[0].columns)  # Columns could be updated if needed
+        )
+
         # Update old records
         lineage[0].schema_encoding = record.schema_encoding # update base record's schema encoding
         lineage[-1].indirection = record.rid   # tail record's rid
