@@ -123,6 +123,8 @@ class Query:
             if not isinstance(column, int):
                 return False
         return True
+    
+    
 
     
     """
