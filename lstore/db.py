@@ -1,4 +1,4 @@
-from lstore.table import Table
+from table import Table
 
 class Database():
 
@@ -26,7 +26,7 @@ class Database():
     def create_table(self, name, num_columns, key_index):
         # Check if table name already exists in tables dictionary
         if name in self.tables:
-            print(f"Table '{name}' already exists, creation failed")
+            # print(f"Table '{name}' already exists, creation failed")
             return None
         else:
             # Create new table
@@ -39,7 +39,7 @@ class Database():
                 "num_columns": num_columns,
                 "key_index": key_index
             }
-            print(f"Table '{name}' created")
+            # print(f"Table '{name}' created")
             return table
 
     
@@ -53,9 +53,10 @@ class Database():
             del self.tables[name]
         # Remove table from table_directory dictionary
             del self.table_directory[name]
-            print(f"Table '{name}' dropped")
+            # print(f"Table '{name}' dropped")
         else:
-            print(f"Table '{name}' does not exist")
+            pass
+            # print(f"Table '{name}' does not exist")
         
 
     
@@ -66,9 +67,9 @@ class Database():
         # Check if table name exists in tables dictionary
         if name in self.tables:
             # Return table
-            print(f"Table '{name}' got")
+            # print(f"Table '{name}' got")
             return self.tables[name]
         else:
-            print(f"Table '{name}' does not exist")
+            # print(f"Table '{name}' does not exist")
             return None
         

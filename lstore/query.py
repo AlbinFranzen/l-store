@@ -1,9 +1,9 @@
 from uuid import uuid4
-from lstore.table import Table, Record
-from lstore.index import Index
-from lstore.page import Page
-from lstore.page_range import PageRange
-from lstore.config import *
+from table import Table, Record
+from index import Index
+from page import Page
+from page_range import PageRange
+from config import *
 import time
 import copy
 
