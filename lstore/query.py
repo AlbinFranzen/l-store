@@ -134,9 +134,14 @@ class Query:
         rid_list = self.table.index.locate(search_key_index, search_key)
         if rid_list == False:
             return False
-        # Get the corresponding records
-        records = [self._traverse_lineage(rid)[-1] for rid in rid_list]
+        records = []
+        rid_list = rid_list.split(",")
+        for rid in rid_list:
+            print("RID: " + rid)
+            records.append(self._traverse_lineage(rid))
 
+
+        # Convert record
         # Convert records to only have the projected columns
         output_records = []
         if all(projected_columns_index):
@@ -149,7 +154,16 @@ class Query:
     # Get list of records from base_rid
     def _traverse_lineage(self, base_rid):
         lineage = []
+        print("BASE RID: " + base_rid)
+        if isinstance(base_rid, bytes):
+            base_rid = base_rid.decode()  # Ensure base_rid is a string
+
+        if base_rid not in self.table.page_directory:
+            print(f"Error: base_rid {base_rid} not found in page_directory")
+            return []
+
         page_entries = self.table.page_directory[base_rid]
+
         for i, (page_range_index, page_index, offset) in enumerate(page_entries): # Loop through the page entries
             page_range = self.table.page_ranges[page_range_index]
             if i == 0: # First record comes from the base page.   
@@ -173,22 +187,23 @@ class Query:
     # RELATIVE_VERSION USAGE: (-1, -2, etc)
     """
     def select_version(self, search_key, search_key_index, projected_columns_index, relative_version):
-        records = self.select(search_key, search_key_index, projected_columns_index)
-        if records == False:
+        record_lineages = self.select(search_key, search_key_index, projected_columns_index)
+        if not record_lineages:
             return False
-        lineages = []
-        for record in records:
-            lineages.append(self._traverse_lineage(record.rid))
-        
+
+        # Here, each element in record_lineages is already a lineage (a list of records)
         results = []
-        for lineage in lineages:
+        for lineage in record_lineages:
+            print("RECORD: ", lineage[0].rid)  # Debug print base record's rid
+            # Use relative_version to choose the record from the lineage.
             if abs(relative_version) > len(lineage):
                 record = lineage[0]
             else:
                 record = lineage[relative_version]
             results.append(record)
         return results
-    
+
+
     """
     # Update a record with specified key and columns
     # Returns True if update is succesful
@@ -196,18 +211,39 @@ class Query:
     # FOR TAIL PAGES
     """
     def update(self, primary_key, *columns):
+        print("update: ", primary_key)
         # Get the rids of the records with the primary key
         base_rid = self.table.index.locate(0, primary_key)
-        print(base_rid)
-        if base_rid == False:
+        if base_rid is False:
             return False
-        
+
+        if isinstance(base_rid, bytes):
+            base_rid = base_rid.decode()  # Decode byte string to regular string
+        print(base_rid)
+        if not base_rid:
+            return False
+        print("update: ", primary_key)
+
         # Get all records in lineage
-        lineage = self._traverse_lineage(base_rid[0])
-        
         
         # Create new record
-        record = Record(lineage[0].rid, "t" + str(self.current_tail_rid), time.time(), [1 if update is not None else orig for orig, update in zip(lineage[0].schema_encoding, [*columns])], [upd if upd is not None else orig for orig, upd in zip(lineage[-1].columns, [*columns])])
+        # Ensure lineage has records before proceeding
+
+
+        lineage = self._traverse_lineage(base_rid)
+        if not lineage:
+            print(f"Error: No lineage found for base_rid {base_rid}")
+            return False  # or handle this appropriately
+
+        # Now access lineage safely
+        record = Record(
+            lineage[0].rid,  # Base RID of lineage
+            "t" + str(self.current_tail_rid),
+            time.time(),
+            lineage[0].schema_encoding,  # Retain schema encoding
+            [None] * len(lineage[0].columns)  # Columns could be updated if needed
+        )
+
         # Update old records
         lineage[0].schema_encoding = record.schema_encoding # update base record's schema encoding
         lineage[-1].indirection = record.rid   # tail record's rid
@@ -265,7 +301,7 @@ class Query:
         range_sum = 0
         record_exists = False
         rids = self.table.index.locate_range(start_range, end_range, aggregate_column_index)
-        if rid == False:
+        if rids == False:
             print("Given range does not exist")
             return False
         

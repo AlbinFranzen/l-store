@@ -9,6 +9,7 @@ class Index:
     def __init__(self, table):
         # One index for each column in the table
         self.indices = [None] *  table.num_columns
+        self.table_name = table.name
         for col in range(table.num_columns):
             self.create_index(col)
 
@@ -26,37 +27,16 @@ class Index:
       until the column values for the record do not match the desired value.
     """
     def locate(self, column, value):
-        if self.indices[column] is not None:  # Ensure the B+ Tree exists for the column
-            keys_index = []  # List to hold matching record IDs
+        if self.indices[column]:  # Ensure the B+ Tree exists for the column
             column_index = self.indices[column]  # Use the pre-existing B+ Tree for the column
-
-            try:
-                sorted_values = list(column_index.items())  # Convert generator to list
-            except RuntimeError as e:
-                print(f"Error: BPlusTree empty for column {column}: {e}")
-                return False  # Prevent crash
-
-            if not sorted_values:
-                print(f"Warning: Index for column {column} is empty.")
-                return False  # No values in index
-            # Use bisect to find the first occurrence of the value
-            index = bisect.bisect_left(sorted_values, value)
-
-            # If the value is found, collect all matching rids
-            while index < len(sorted_values) and sorted_values[index] == value:
-                keys_index.append(index)
-                index += 1
-
-            primary_key_index = self.indices[0]  # primary key column
-            primary_keys = list(primary_key_index.items())
-            return_keys = []
-            for index in keys_index:
-                return_keys.append(primary_keys[index])
-
-            # If primary key corresponding to desired column value exists
-            if return_keys:
-                return return_keys
-        return False  # Return False if no matching record is found
+            print(f"column index: {column_index}")
+            try:       
+                if column_index[value] is not None: # C.S. string of RIDs
+                    print(f"located value {column_index[value]}")
+                    return column_index[value].decode('utf-8')
+            except (IndexError, KeyError):
+                print("no matching record")
+                return False  # Return False if no matching record is found
 
 
 
@@ -64,16 +44,19 @@ class Index:
     # Returns the RIDs of all records with values in column "column" between "begin" and "end"
     """
     def locate_range(self, begin, end, column):
-        rids = [] # List to hold RIDs
-
-        #use locate and iterate through all values between begin and end
-        for val in range(begin, end+1):
-            result = self.locate(column, val)
-            if result:
-                rids.extend(result)
-            
-        return rids
-
+ 
+        rid_list = []
+        #get all values in range begin to end
+        rid_dict = self.indices[column][begin:end]
+        print(f"rid dictionary: {rid_dict}")
+        for key in rid_dict:
+            #appends rid value
+            rid_list.append(rid_dict[key].decode('utf-8'))
+        
+        if len(rid_list) == 0:
+            return False
+        else:
+            return rid_list
 
 
     """
@@ -89,12 +72,17 @@ class Index:
         index_dir = "indexes"
         os.makedirs(index_dir, exist_ok=True)
 
-        # Check if an index for this column already exists
-        if self.indices[column_number] is None:  # Corrected check
-            self.indices[column_number] = BPlusTree(os.path.join(index_dir, f"index_{column_number}.txt"))
-            print(f"Index created for column {column_number}.")
-        else:
-            print(f"Index for column {column_number} already exists.")
+        # Define the index file path
+        index_file = os.path.join(index_dir, f"{self.table_name}_index_{column_number}.txt")
+
+        # Check if a previous index file exists and delete it
+        if os.path.exists(index_file):
+            os.remove(index_file)
+            print(f"Deleted old index file: {index_file}")
+
+        # Create a new index
+        self.indices[column_number] = BPlusTree(index_file, order=75)
+        print(f"Index created for column {column_number}.")
 
 
 
@@ -106,9 +94,18 @@ class Index:
         pass
 
     def add_record(self, record):
-        rid_str = record.rid
-        rid = int(rid_str[1:]) #(b/p)XXXX... = > XXXX
-        for index, value in zip(self.indices, vars(record).values()):
-            if value is not None:
-                index.insert(rid, value)
-
+        rid_to_add = record.rid
+        columns = list(record.columns)
+        #can make "for col in columns:"
+        for col in range(len(columns)):
+            rid_str = self.locate(col, columns[col])
+            #if list is empty
+            if not rid_str:
+                self.indices[col][columns[col]] = rid_to_add.encode('utf-8')
+            #else list is not empty
+            else:
+                rid_str += ("," + rid_to_add)
+                rid_str = rid_str.encode('utf-8')
+                self.indices[col][columns[col]] = rid_str
+                
+                
