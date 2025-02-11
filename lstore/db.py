@@ -66,6 +66,7 @@ class Database():
         # Check if table name exists in tables dictionary
         if name in self.tables:
             # Return table
+            print(f"Table '{name}' got")
             return self.tables[name]
         else:
             print(f"Table '{name}' does not exist")

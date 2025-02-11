@@ -38,26 +38,31 @@ class Query:
     # Return False if record doesn't exist or is locked due to 2PL
     """
     def delete(self, primary_key):
+
         # get rids with the primary key
         base_rid = self.table.index.locate(0, primary_key)
         if base_rid == False:
             return False
         
+        if isinstance(base_rid, bytes):
+            base_rid = base_rid.decode()
+        if not base_rid:
+            return False
+
         # get all records in lineage
-        lineage = self._traverse_lineage(base_rid[0])
+        lineage = self._traverse_lineage(base_rid)
 
         # create a new tail record
-        record = Record(
-                        lineage[0].rid,
+        delete_record = Record(
+                        lineage[-1].rid,
                         "t" + str(self.current_tail_rid),
                         time.time(),
-                        [0] * (len(lineage[0].schema_encoding) - 1),
-                        [None] * len(lineage[0].columns)
+                        schema_encoding = [0] * len(lineage[0].schema_encoding),
+                        columns = [None] * len(lineage[0].columns)
                     )
         
-        # update base record's schema encoding
-        lineage[0].schema_encoding = record.schema_encoding
-        lineage[-1].indirection = record.rid
+        # update tail record's rid
+        lineage[-1].indirection = delete_record.rid
 
         # ensure space exists
         if not self.table.page_ranges[-1].tail_pages[-1].has_capacity():
@@ -66,10 +71,10 @@ class Query:
             self.table.page_ranges.append(PageRange())
         
         # add record in index
-        self.table.index.add_record(record)
+        self.table.index.add_record(delete_record)
 
         # insert tail record
-        offset = self.table.page_ranges[-1].tail_pages[-1].write(record)
+        offset = self.table.page_ranges[-1].tail_pages[-1].write(delete_record)
         tail_page_index = len(self.table.page_ranges[-1].tail_pages) - 1
         page_range_index = len(self.table.page_ranges) - 1
 
