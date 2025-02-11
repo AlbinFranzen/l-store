@@ -89,20 +89,18 @@ class Index:
         pass
 
     def add_record(self, record):
-        rid_str = record.rid
+        rid_to_add = record.rid
         columns = list(record.columns)
         #can make "for col in columns:"
         for col in range(len(columns)):
-            rid_list = self.locate(col, columns[col])
+            rid_str = self.locate(col, columns[col])
             #if list is empty
-            if not rid_list:
-                self.indices[col][columns[col]] = rid_str.encode('utf-8')
+            if not rid_str:
+                self.indices[col][columns[col]] = rid_to_add.encode('utf-8')
             #else list is not empty
             else:
-                rid_str = rid_list.decode('utf-8')
-                for key in rid_list:
-                    rid_str += (',' + (key))
-                self.indices[col][columns[col]] = rid_str.encode('utf-8')
+                rid_str += ("," + rid_to_add)
+                rid_str = rid_str.encode('utf-8')
+                self.indices[col][columns[col]] = rid_str
                 
-                if columns[col] is not None:
-                    self.indices[col][columns[col]] = rid_str.encode('utf-8')
+                
