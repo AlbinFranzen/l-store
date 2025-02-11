@@ -114,6 +114,31 @@ class BPlusTree:
             else:
                 node.insert_entry(record)
                 self._split_leaf(node)
+                
+    def update_existing(self, key, new_value: bytes) -> bool:
+        """
+        Search for the key in the tree and, if found, update its stored value to new_value.
+        Returns True if the key was found and updated, or False if not found.
+        This performs a single lookup (via _search_in_tree and get_entry) and then updates.
+        """
+        with self._mem.write_transaction:
+            node = self._search_in_tree(key, self._root_node)
+            try:
+                record = node.get_entry(key)
+            except ValueError:
+                # Key not found
+                return False
+
+            # If the new value fits in the node directly, update it;
+            # otherwise, create an overflow chain.
+            if len(new_value) <= self._tree_conf.value_size:
+                record.value = new_value
+                record.overflow_page = None
+            else:
+                record.value = None
+                record.overflow_page = self._create_overflow(new_value)
+            self._mem.set_node(node)
+            return True
 
     def batch_insert(self, iterable: Iterable):
         """Insert many elements in the tree at once.

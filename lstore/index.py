@@ -15,11 +15,8 @@ class Index:
             self.create_index(col)
 
 
-
     def __repr__(self):
         return f"indices: {self.indices}"
-
-
 
     """
     # returns the location of all records with the given value on column "column"
@@ -78,7 +75,7 @@ class Index:
             os.remove(index_file)
 
         # Create a new index
-        self.indices[column_number] = BPlusTree(index_file, order=75)
+        self.indices[column_number] = BPlusTree(index_file, order=75, cache_size=10000)
 
 
 
@@ -96,14 +93,12 @@ class Index:
         for col in range(len(columns)):
             if columns[col] == None:
                 continue
-            rid_str = self.locate(col, columns[col])
+            replaced = self.indices[col].update_existing(columns[col], rid_to_add.encode('utf-8'))
             #if list is empty
-            if not rid_str:
+            if not replaced:
                 self.indices[col][columns[col]] = rid_to_add.encode('utf-8')
-            #else list is not empty
-            else:
-                rid_str += ("," + rid_to_add)
-                rid_str = rid_str.encode('utf-8')
-                self.indices[col][columns[col]] = rid_str
+
+                
+    
                 
                 
