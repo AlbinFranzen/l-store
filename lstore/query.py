@@ -233,7 +233,7 @@ class Query:
             "t" + str(self.current_tail_rid),
             time.time(),
             lineage[0].schema_encoding,  # Retain schema encoding
-            [None, *columns]  # Columns could be updated if needed
+            [*columns]  # Columns could be updated if needed
         )
 
         # Update old records
