@@ -1,6 +1,5 @@
-import bisect
 import os
-from lstore.bplustree.tree import BPlusTree
+from bplustree.tree import BPlusTree
 
 class Index:
 
