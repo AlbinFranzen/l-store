@@ -1,7 +1,11 @@
+from uuid import uuid4
 from table import Table, Record
+from index import Index
 from page import Page
 from page_range import PageRange
+from config import *
 import time
+import copy
 
 class Query:
     """

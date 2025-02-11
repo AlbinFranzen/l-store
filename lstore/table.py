@@ -1,4 +1,5 @@
 from index import Index
+from time import time
 from page_range import PageRange
 
 INDIRECTION_COLUMN = 0
