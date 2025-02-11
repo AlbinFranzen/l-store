@@ -65,7 +65,7 @@ for i in range(num_threads):
 
 
 # Check inserted records using select query in the main thread outside workers
-for key in keys:
+for key in keys:  
     record = query.select(key, 0, [1, 1, 1, 1, 1])[0]
     error = False
     for i, column in enumerate(record.columns):

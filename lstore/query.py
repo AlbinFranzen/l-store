@@ -190,18 +190,31 @@ class Query:
     # RELATIVE_VERSION USAGE: (-1, -2, etc)
     """
     def select_version(self, search_key, search_key_index, projected_columns_index, relative_version):
-        record_lineages = self.select(search_key, search_key_index, projected_columns_index)
-        if not record_lineages:
+        rids_combined = self.table.index.locate(search_key_index, search_key)
+        if not rids_combined:
             return False
-
+        rid_list = rids_combined.split(",")
+        
         # Here, each element in record_lineages is already a lineage (a list of records)
         results = []
-        for lineage in record_lineages:
-            # Use relative_version to choose the record from the lineage.
-            if abs(relative_version) > len(lineage):
-                record = lineage[0]
+        for rid in rid_list:
+            lineage = self._traverse_lineage(rid)
+            if relative_version < 0:
+                target_index = min(len(lineage) + relative_version, len(lineage)-1)
             else:
-                record = lineage[relative_version]
+                target_index = relative_version
+
+            # Start with the base record's columns (assumed to be in record_list[0])
+            merged_columns = list(lineage[0].columns)
+
+            # Merge updates from record_list[1] through record_list[target_index] (inclusive)
+            for record in lineage[1:target_index + 1]:
+                for i, value in enumerate(list(record.columns)):
+                    if value is not None:
+                        merged_columns[i] = value
+            
+            
+            record = Record(lineage[0].rid, lineage[0].indirection, lineage[-1].time_stamp, lineage[-1].schema_encoding, [element for element, bit in zip(merged_columns, projected_columns_index) if bit == 1])
             results.append(record)
         return results
 
