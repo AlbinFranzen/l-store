@@ -1,5 +1,5 @@
-from table import Table, Record
-from index import Index
+from c_lstore.table import Table, Record
+from c_lstore.index import Index
 
 class TransactionWorker:
 
