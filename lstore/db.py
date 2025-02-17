@@ -1,14 +1,16 @@
+import os
 from table import Table
 
 class Database():
-
     def __init__(self):
         """
         Initializes the database
         """
-        self.tables = {}          # A dictionary of tables objects
-        self.table_directory = {} # A dictionary of table metadata
-        pass
+        self.tables = {}
+        self.table_directory = {}
+        self.db_path = os.path.join(os.getcwd(), "database") # Database directory path
+        if not os.path.exists(self.db_path):
+            os.makedirs(self.db_path)
 
     # Not required for milestone1
     def open(self, path):
@@ -29,8 +31,13 @@ class Database():
             # print(f"Table '{name}' already exists, creation failed")
             return None
         else:
+            # Create table directory inside database folder
+            table_path = os.path.join(self.db_path, name)
+            if not os.path.exists(table_path):
+                os.makedirs(table_path)
+            
             # Create new table
-            table = Table(name, num_columns, key_index)
+            table = Table(name, num_columns, key_index, table_path)
             # Add table to tables dictionary
             self.tables[name] = table
             # Add table to table_directory dictionary
@@ -49,9 +56,15 @@ class Database():
     def drop_table(self, name):
         # Check if table name exists in tables dictionary
         if name in self.tables:
-        # Remove table from tables dictionary
+            # Remove table directory
+            table_path = os.path.join(self.db_path, name)
+            if os.path.exists(table_path):
+                import shutil
+                shutil.rmtree(table_path)
+                
+            # Remove table from tables dictionary
             del self.tables[name]
-        # Remove table from table_directory dictionary
+            # Remove table from table_directory dictionary
             del self.table_directory[name]
             # print(f"Table '{name}' dropped")
         else:
@@ -72,4 +85,4 @@ class Database():
         else:
             # print(f"Table '{name}' does not exist")
             return None
-        
+

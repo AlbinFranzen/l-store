@@ -1,11 +1,17 @@
 from page import Page
 from config import *
+import os
 
 # structure that defines list of valid base and tail pages
 class PageRange:
-    def __init__(self):
-        self.base_pages = [Page()]
-        self.tail_pages = [Page()]
+    def __init__(self, path):
+        self.path = path
+        init_base_path = os.path.join(path, 'base_0')
+        init_tail_path = os.path.join(path, 'tail_0')
+        os.makedirs(init_base_path, exist_ok=True)
+        os.makedirs(init_tail_path, exist_ok=True)
+        self.base_pages = [Page(init_base_path)]
+        self.tail_pages = [Page(init_tail_path)]
         self.max_base_pages = PAGE_RANGE_SIZE  # amount defined in Milestone 1
 
     def __repr__(self):

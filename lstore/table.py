@@ -1,6 +1,8 @@
+import os
 from index import Index
 from time import time
 from page_range import PageRange
+from bufferpool import BufferPool
 
 INDIRECTION_COLUMN = 0
 RID_COLUMN = 1
@@ -27,14 +29,19 @@ class Table:
     :param key: int             #Index of table key in columns
     """
 
-    def __init__(self, name, num_columns, key):
+    def __init__(self, name, num_columns, key, path):
         self.name = name
         self.key = key
         self.num_columns = num_columns
-        self.page_ranges = [PageRange()]
         self.page_directory = {}
         self.index = Index(self)
-        pass
+        self.bufferpool = BufferPool()
+        self.path = path
+        # Create page range folder
+        init_page_range_path = os.path.join(self.path, "pagerange_0")
+        if not os.path.exists(init_page_range_path):
+            os.makedirs(init_page_range_path)
+        self.page_ranges = [PageRange(init_page_range_path)]
         
     def __repr__(self):
         return f"Name: {self.name}\nKey: {self.key}\nNum columns: {self.num_columns}\nPage_ranges: {self.page_ranges}\nPage_directory: {self.page_directory}\nindex: {self.index}"
