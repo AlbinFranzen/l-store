@@ -1,4 +1,5 @@
 from config import POOL_SIZE
+import os
 
 class BufferPool:
     def __init__(self, table_path):
@@ -15,61 +16,55 @@ class BufferPool:
         """
         Check if buffer pool is full
         """            
-        try: 
-            # find least pin_count frame
-            min_pin = float('inf')
-            for frame in self.frames:
-                min_pin = min(min_pin, frame[2])
+        if len(self.frames) >= self.pool_size:
+            try: 
+                # find pages with least pin count in frames
+                min_pin = float('inf')
+                for frame in self.frames:
+                    min_pin = min(min_pin, frame[2])
 
-            # find pages with min_pin in frames
-            candidates = []
-            for frame in self.frames:
-                if frame[2] == min_pin:
-                    candidates.append(frame)
+                # find pages with min_pin in frames
+                candidates = []
+                for frame in self.frames:
+                    if frame[2] == min_pin:
+                        candidates.append(frame)
 
-            if not candidates:
-                return False
-            
-            # find clean pages in candidates
-            selected_lru_index = float('inf')
-            for frame in candidates:
-                if not frame[1]:
-                    try:
-                        index = self.LRU_not_dirty.index(frame[0].page_id)
-                    except ValueError:
-                        index = float('inf')
-                    if index < selected_lru_index:
-                        selected_lru_index = index
-                        selected_frame = frame
-
-            # if no clean pages, find dirty pages in candidates
-            if selected_frame is None:
-                selected_lru_index = float('inf')
+                if not candidates:
+                    return False
+                
+                # find clean pages in candidates
                 for frame in candidates:
-                    if frame[1]:
-                        try:
-                            index = self.LRU_is_dirty.index(frame[0].page_id)
-                        except ValueError:
-                            index = float('inf')
-                        if index < selected_lru_index:
-                            selected_lru_index = index
+                    if not frame[1]:
                             selected_frame = frame
+
+                # if no clean pages, find dirty pages in candidates
+                if selected_frame is None:
+                    for frame in candidates:
+                        if frame[1]:
+                                selected_frame = frame
+                    if selected_frame:
+                        self.write_to_disk(selected_frame)
+
+                # remove selected frame from frames
                 if selected_frame:
-                    selected_frame[0].write_to_disk()
+                    self.frames.remove(selected_frame)
+                    if not selected_frame[1]:
+                        self.LRU_not_dirty.remove(selected_frame)
+                    else:
+                        self.LRU_is_dirty.remove(selected_frame)
+                    return True
+                return False
 
-            # remove selected frame from frames
-            if selected_frame:
-                self.frames.remove(selected_frame)
-                if not selected_frame[1]:
-                    self.LRU_not_dirty.remove(selected_frame[0].page_id)
-                else:
-                    self.LRU_is_dirty.remove(selected_frame[0].page_id)
-                return True
-            return False
-
-        except Exception as e:
-            return len(self.frames) >= self.pool_size
+            except Exception as e:
+                return False
+        
+        return False
     
+    def write_to_disk(self, page):
+        """
+        Write page to disk
+        """
+
     def add_frame(self, frame):
         """
         Add a new frame to the buffer pool
