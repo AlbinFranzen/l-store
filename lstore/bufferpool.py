@@ -11,11 +11,64 @@ class BufferPool:
         self.LRU_is_dirty = []  # List to track dirty pages for LRU
         self.LRU_not_dirty = []  # List to track clean pages for LRU
         
-    def is_full(self):
+    def evict(self):
         """
         Check if buffer pool is full
-        """
-        return len(self.frames) >= self.pool_size
+        """            
+        try: 
+            # find least pin_count frame
+            min_pin = float('inf')
+            for frame in self.frames:
+                min_pin = min(min_pin, frame[2])
+
+            # find pages with min_pin in frames
+            candidates = []
+            for frame in self.frames:
+                if frame[2] == min_pin:
+                    candidates.append(frame)
+
+            if not candidates:
+                return False
+            
+            # find clean pages in candidates
+            selected_lru_index = float('inf')
+            for frame in candidates:
+                if not frame[1]:
+                    try:
+                        index = self.LRU_not_dirty.index(frame[0].page_id)
+                    except ValueError:
+                        index = float('inf')
+                    if index < selected_lru_index:
+                        selected_lru_index = index
+                        selected_frame = frame
+
+            # if no clean pages, find dirty pages in candidates
+            if selected_frame is None:
+                selected_lru_index = float('inf')
+                for frame in candidates:
+                    if frame[1]:
+                        try:
+                            index = self.LRU_is_dirty.index(frame[0].page_id)
+                        except ValueError:
+                            index = float('inf')
+                        if index < selected_lru_index:
+                            selected_lru_index = index
+                            selected_frame = frame
+                if selected_frame:
+                    selected_frame[0].write_to_disk()
+
+            # remove selected frame from frames
+            if selected_frame:
+                self.frames.remove(selected_frame)
+                if not selected_frame[1]:
+                    self.LRU_not_dirty.remove(selected_frame[0].page_id)
+                else:
+                    self.LRU_is_dirty.remove(selected_frame[0].page_id)
+                return True
+            return False
+
+        except Exception as e:
+            return len(self.frames) >= self.pool_size
     
     def add_frame(self, frame):
         """
