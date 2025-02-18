@@ -36,6 +36,7 @@ class BufferPool:
                 for frame in candidates:
                     if not frame[1]:
                             selected_frame = frame
+                            break
 
                 # if no clean pages, find dirty pages in candidates
                 if selected_frame is None:
@@ -60,7 +61,7 @@ class BufferPool:
         
         return False
     
-    def write_to_disk(self, page):
+    def write_to_disk(self, frame):
         """
         Write page to disk
         """
