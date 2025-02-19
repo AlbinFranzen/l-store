@@ -70,4 +70,20 @@ class BufferPool:
         """
         Add a new frame to the buffer pool
         """
-        pass
+        #removes a frame if bufferpool is full
+        #returns False if all frames are pinned (cannot evict)
+        if len(self.frames) >= self.pool_size:
+            if not self.evict():
+                return False
+            
+        #adds a new frame to the bufferpool    
+        self.frames.append(frame)
+
+        #add frame to dirty list to track modified pages
+        if frame[1]:
+            self.LRU_is_dirty.append(frame)
+        #add frame to clean list for easier eviction
+        else:
+            self.LRU_not_dirty.append(frame)
+        
+        return True
