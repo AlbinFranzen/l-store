@@ -77,4 +77,11 @@ class PageRange:
                 f"Unable to set base pages. Passed list exceeds max amount of base pages: ${self.max_base_pages}"
             )
             
+    # reads pages from disk
+    def read_from_disk(self, file_path):
+        pass
+
+    # writes pages to disk
+    def write_to_disk(self, file_path):
+        pass
 
