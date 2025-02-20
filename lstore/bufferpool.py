@@ -55,19 +55,91 @@ class BufferPool:
             except Exception as e:
                 return False
         
-    def add_frame(self, frame):
+    def add_frame(self, page_path):
         """
-        Add a new frame to the buffer pool
+        Add a new frame to the buffer pool using a page path
+        Args:
+            page_path: path to the page file
+        Returns:
+            Frame object if successful, None if error
         """
-        #removes a frame if bufferpool is full
-        #returns False if all frames are pinned (cannot evict)
+        # Check if bufferpool is full and try to evict if needed
         if len(self.frames) >= self.pool_size:
-            if not self.evict():
-                return False
+            if not self.evict_page():
+                return None
             
-        #adds a new frame to the bufferpool    
-        self.frames.append(frame)
-        return True
+        # Read page data from disk
+        page_data = self.read_from_disk(page_path)
+        if page_data is None:
+            return None
+        
+        # Create new frame with page data
+        new_frame = Frame(page=page_data, page_path=page_path)
+        
+        # Add frame to buffer pool
+        self.frames.append(new_frame)
+        return new_frame
+
+    def write_to_disk(self, page_path, data):
+        """
+        Write a page to disk
+        Args:
+            page_path: path to the page file
+            data: data to write
+        """
+        try:
+            with open(page_path, 'wb') as f:
+                f.write(data)
+                f.flush()
+                os.fsync(f.fileno())  # Ensure data is written to disk
+            return True
+        except Exception as e:
+            print(f"Error writing to disk: {e}")
+            return False
+
+    def read_from_disk(self, page_path):
+        """
+        Read a page from disk
+        Args:
+            page_path: path to the page file
+        Returns:
+            data read from disk or None if error
+        """
+        try:
+            with open(page_path, 'rb') as f:
+                data = f.read()
+            return data
+        except Exception as e:
+            print(f"Error reading from disk: {e}")
+            return None
+
+    def get_page(self, page_path):
+        """
+        Get a page from buffer pool or disk
+        Args:
+            page_path: path to the page file
+        Returns:
+            page data or None if error
+        """
+        # Check if page is in buffer pool
+        for frame in self.frames:
+            if frame.page_path == page_path:
+                frame.increment_page_count()
+                return frame.page
+
+        # If not in buffer pool, read from disk
+        page_data = self.read_from_disk(page_path)
+        if page_data is None:
+            return None
+
+        # Create new frame
+        new_frame = Frame(page=page_data, page_path=page_path)
+        
+        # Add to buffer pool
+        if not self.add_frame(page_path):
+            return None
+        
+        return page_data
 
 class Frame:
     def __init__(self, page=None, page_path=None):
