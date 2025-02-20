@@ -1,5 +1,9 @@
 from lstore.config import POOL_SIZE
+from collections import OrderedDict
 import os
+
+from lstore.page import Page
+
 
 class BufferPool:
     def __init__(self, table_path):
@@ -8,52 +12,56 @@ class BufferPool:
         """
         self.table_path = table_path
         self.pool_size = POOL_SIZE
-        self.frames = []  # List to store page frames [[page, is_dirty, pin_count],...]
-        self.LRU_is_dirty = []  # List to track dirty pages for LRU
-        self.LRU_not_dirty = []  # List to track clean pages for LRU
-
+        # Use OrderedDict to implement LRU - most recently used items are at the end
+        self.frames = OrderedDict()  # {page_path: Frame}
+        
+    def _update_lru(self, page_path):
+        """
+        Move accessed page to end of LRU order
+        """
+        if page_path in self.frames:
+            frame = self.frames.pop(page_path)
+            self.frames[page_path] = frame
+            
     def is_full(self):
         """
         Check if buffer pool is full
         """
-        if len(self.frames) >= self.pool_size:
-            return True
-        else:
-            return False
+        return len(self.frames) >= self.pool_size
         
     def evict_page(self):
         """
-        Check if buffer pool is full and evict a page if necessary
+        Evict least recently used unpinned page, prioritizing non-dirty pages
+        Returns:
+            True if page was evicted, False if no page could be evicted
         """            
-        if self.is_full():
-            try: 
-                LRU = self.frames[0] # Least Used Page
-                frame_index = -1
-                min_count = float('inf')
+        if not self.is_full():
+            return True
+        
+        try:
+            # First try to evict non-dirty pages
+            for page_path, frame in list(self.frames.items()):
+                if frame.pin_count == 0 and not frame.dirty_bit:
+                    del self.frames[page_path]
+                    return True
 
-                # find page with least pin count in frames
-                for i, frame in enumerate(self.frames):
-                    if frame.pin_count < min_count:
-                        min_count = frame.pin_count
-                        LRU = frame
-                        frame_index = i       
+            # If no non-dirty pages available, try dirty pages
+            for page_path, frame in list(self.frames.items()):
+                if frame.pin_count == 0:
+                    # Write dirty page to disk
+                    if not self.write_to_disk(page_path, frame.page):
+                        continue  # Try next frame if write fails
+                    
+                    del self.frames[page_path]
+                    return True
+                    
+            # If we get here, all pages are pinned
+            print("Warning: All pages are pinned, cannot evict")
+            return False
 
-                # if all pages are pinned, return False
-                if min_count > 0:
-                    print("All pages are pinned")
-                    return False
-                
-                # if page is dirty, write it to disk
-                if LRU.is_dirty:
-                    path = LRU.page_path
-                    self.write_to_disk(path)
-
-                # release memory from frames
-                del self.frames[frame_index]
-                return frame_index
-
-            except Exception as e:
-                return False
+        except Exception as e:
+            print(f"Error during page eviction: {e}")
+            return False
         
     def add_frame(self, page_path):
         """
@@ -63,35 +71,40 @@ class BufferPool:
         Returns:
             Frame object if successful, None if error
         """
-        # Check if bufferpool is full and try to evict if needed
-        if len(self.frames) >= self.pool_size:
-            if not self.evict_page():
-                return None
+        # Check if frame already exists
+        if page_path in self.frames:
+            self._update_lru(page_path)
+            return self.frames[page_path]
+            
+        # Try to make space if needed
+        if self.is_full() and not self.evict_page():
+            return None
             
         # Read page data from disk
         page_data = self.read_from_disk(page_path)
         if page_data is None:
             return None
         
-        # Create new frame with page data
+        # Create new frame and add to pool
         new_frame = Frame(page=page_data, page_path=page_path)
-        
-        # Add frame to buffer pool
-        self.frames.append(new_frame)
+        self.frames[page_path] = new_frame
         return new_frame
 
-    def write_to_disk(self, page_path, data):
+    def write_to_disk(self, page_path, page):
         """
         Write a page to disk
         Args:
             page_path: path to the page file
-            data: data to write
+            page: page object to write
         """
         try:
+            # Ensure directory exists
+            os.makedirs(os.path.dirname(page_path), exist_ok=True)
+            
             with open(page_path, 'wb') as f:
-                f.write(data)
+                f.write(page.serialize())  # need to implement page serializing
                 f.flush()
-                os.fsync(f.fileno())  # Ensure data is written to disk
+                os.fsync(f.fileno())
             return True
         except Exception as e:
             print(f"Error writing to disk: {e}")
@@ -103,12 +116,15 @@ class BufferPool:
         Args:
             page_path: path to the page file
         Returns:
-            data read from disk or None if error
+            Page object or None if error
         """
         try:
+            if not os.path.exists(page_path):
+                return None
+                
             with open(page_path, 'rb') as f:
                 data = f.read()
-            return data
+            return Page.deserialize(data)  # need to implement page de-serializing
         except Exception as e:
             print(f"Error reading from disk: {e}")
             return None
@@ -121,25 +137,34 @@ class BufferPool:
         Returns:
             page data or None if error
         """
-        # Check if page is in buffer pool
-        for frame in self.frames:
-            if frame.page_path == page_path:
-                frame.increment_page_count()
-                return frame.page
+        # Try to get from buffer pool first
+        frame = self.frames.get(page_path)
+        if frame:
+            frame.increment_page_count()
+            self._update_lru(page_path)
+            return frame.page
 
-        # If not in buffer pool, read from disk
-        page_data = self.read_from_disk(page_path)
-        if page_data is None:
-            return None
-
-        # Create new frame
-        new_frame = Frame(page=page_data, page_path=page_path)
+        # Not in buffer pool, try to add it
+        frame = self.add_frame(page_path)
+        if frame:
+            frame.increment_pin_count()
+            return frame.page
+            
+        return None
         
-        # Add to buffer pool
-        if not self.add_frame(page_path):
-            return None
-        
-        return page_data
+    def unpin_page(self, page_path):
+        """
+        Decrement pin count for a page
+        """
+        if page_path in self.frames:
+            self.frames[page_path].decrement_page_count()
+            
+    def mark_dirty(self, page_path):
+        """
+        Mark a page as dirty
+        """
+        if page_path in self.frames:
+            self.frames[page_path].set_dirty_bit()
 
 class Frame:
     def __init__(self, page=None, page_path=None):
@@ -160,10 +185,10 @@ class Frame:
     def clear_page_path(self):
         self.page_path = None
 
-    def increment_page_count(self):
+    def increment_pin_count(self):
         self.pin_count += 1
 
-    def decrement_page_count(self):
+    def decrement_pin_count(self):
         if self.pin_count > 0:
             self.pin_count -= 1
 
