@@ -101,14 +101,21 @@ class Query:
         # Create record
         record = Record(None, f"b{self.current_base_rid}", time.time(), [0] * len(columns), [*columns])
         
-        # Make sure space exists
+        # Add record to index
         self.table.index.add_record(record)
+        
+        
+        
+        # Ensure space exists - TODO
         if not self.table.page_ranges[-1].has_capacity(): # If page range is full, create new one
             self.table.page_ranges.append(PageRange())
         if not self.table.page_ranges[-1].base_pages[-1].has_capacity(): # If base page is full, create new one
             self.table.page_ranges[-1].base_pages.append(Page())
             
-        # Write and get location 
+        # Write and get location
+        location_path = 
+        
+        
         offset = self.table.page_ranges[-1].base_pages[-1].write(record) 
         base_page_index = len(self.table.page_ranges[-1].base_pages) - 1
         page_range_index = len(self.table.page_ranges) - 1 
