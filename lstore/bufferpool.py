@@ -1,4 +1,4 @@
-from config import POOL_SIZE
+from lstore.config import POOL_SIZE
 import os
 
 class BufferPool:
@@ -67,14 +67,6 @@ class BufferPool:
             
         #adds a new frame to the bufferpool    
         self.frames.append(frame)
-
-        #add frame to dirty list to track modified pages
-        if frame[1]:
-            self.LRU_is_dirty.append(frame)
-        #add frame to clean list for easier eviction
-        else:
-            self.LRU_not_dirty.append(frame)
-        
         return True
 
 class Frame:

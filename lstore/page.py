@@ -1,4 +1,4 @@
-from config import PAGE_RECORD_SIZE
+from lstore.config import PAGE_RECORD_SIZE
 
 class Page:
     def __init__(self):
