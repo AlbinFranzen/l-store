@@ -49,6 +49,9 @@ class Table:
         init_page_range_path = os.path.join(self.path, "pagerange_0")
         if not os.path.exists(init_page_range_path):
             os.makedirs(init_page_range_path)
+            # Create base and tail directories within the page range
+            os.makedirs(os.path.join(init_page_range_path, "base"))
+            os.makedirs(os.path.join(init_page_range_path, "tail"))
         
     def __repr__(self):
         return f"Name: {self.name}\nKey: {self.key}\nNum columns: {self.num_columns}\nPage_ranges: {self.page_ranges}\nPage_directory: {self.page_directory}\nindex: {self.index}"

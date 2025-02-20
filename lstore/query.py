@@ -6,6 +6,7 @@ from lstore.page import Page
 from lstore.config import *
 import time
 import copy
+import os
 
 class Query:
     """
@@ -104,24 +105,31 @@ class Query:
         # Add record to index
         self.table.index.add_record(record)
         
+        # Ensure space exists
+        last_pagerange_index = len(os.listdir(f'database/{self.table.name}')) - 1
+        last_page_index = len(os.listdir(f'database/{self.table.name}/pagerange_{last_pagerange_index}')) - 1
         
+        last_location_path = f"database/{self.table.name}/pagerange_{last_pagerange_index}/base/page_{last_page_index}.csv"
         
-        # Ensure space exists - TODO
-        if not self.table.page_ranges[-1].has_capacity(): # If page range is full, create new one
-            self.table.page_ranges.append(PageRange())
-        if not self.table.page_ranges[-1].base_pages[-1].has_capacity(): # If base page is full, create new one
-            self.table.page_ranges[-1].base_pages.append(Page())
-            
-        # Write and get location
-        location_path = 
-        
-        
-        offset = self.table.page_ranges[-1].base_pages[-1].write(record) 
-        base_page_index = len(self.table.page_ranges[-1].base_pages) - 1
-        page_range_index = len(self.table.page_ranges) - 1 
-        
+        last_page = self.table.bufferpool.get_page(last_location_path)
+        if not last_page.has_capacity():
+            new_page = Page()
+            new_page.write(record)
+            if last_page_index < PAGE_RANGE_SIZE: # If space in page_range, write to new page in page_range
+                insert_path = f"database/{self.table.name}/pagerange_{last_pagerange_index}/base/page_{last_page_index + 1}.csv"
+                self.table.bufferpool.write_page(new_page, insert_path)
+            else: # Else create new page_range
+                os.makedirs(f"database/{self.table.name}/pagerange_{last_pagerange_index + 1}/base")
+                os.makedirs(f"database/{self.table.name}/pagerange_{last_pagerange_index + 1}/tail")
+                insert_path = f"database/{self.table.name}/pagerange_{last_pagerange_index + 1}/base/page_0.csv"
+                self.table.bufferpool.write_page(new_page, insert_path)
+        else:
+            insert_path = last_location_path
+            last_page.write(record)
+            self.table.bufferpool.write_page(last_page, insert_path)
+                   
         # Add new location to page directory 
-        self.table.page_directory[f"b{self.current_base_rid}"] = [[page_range_index, base_page_index, offset]]
+        self.table.page_directory[f"b{self.current_base_rid}"] = insert_path
         self.current_base_rid += 1
         return True
     
