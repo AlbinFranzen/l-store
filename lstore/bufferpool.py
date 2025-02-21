@@ -80,7 +80,7 @@ class BufferPool:
         self.frames.append(new_frame)
         return new_frame
 
-    def write_to_disk(self, page_path, data):
+    def write_to_disk(self, page_path, page):
         """
         Write a page to disk
         Args:
@@ -89,7 +89,7 @@ class BufferPool:
         """
         try:
             with open(page_path, 'wb') as f:
-                f.write(data)
+                f.write(page)
                 f.flush()
                 os.fsync(f.fileno())  # Ensure data is written to disk
             return True
@@ -140,6 +140,29 @@ class BufferPool:
             return None
         
         return page_data
+    
+    def update_page(self, page_path, new_page):
+        """
+        Update a page in the buffer pool or disk
+        Args:
+            page_path: path to the page file
+            data: data to write
+        Returns:
+            True if successful, False if error
+        """
+        # Check if page is in buffer pool
+        for frame in self.frames:
+            if frame.page_path == page_path:
+                frame.set_page(new_page)
+                frame.set_dirty_bit()
+                return True
+
+        # If not in buffer pool, write to disk
+        if not self.write_to_disk(page_path, new_page):
+            return False
+
+        return True
+    
 
 class Frame:
     def __init__(self, page=None, page_path=None):

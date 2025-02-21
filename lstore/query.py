@@ -117,16 +117,16 @@ class Query:
             new_page.write(record)
             if last_page_index < PAGE_RANGE_SIZE: # If space in page_range, write to new page in page_range
                 insert_path = f"database/{self.table.name}/pagerange_{last_pagerange_index}/base/page_{last_page_index + 1}.csv"
-                self.table.bufferpool.write_page(new_page, insert_path)
+                self.table.bufferpool.write_to_disk(new_page, insert_path)
             else: # Else create new page_range
                 os.makedirs(f"database/{self.table.name}/pagerange_{last_pagerange_index + 1}/base")
                 os.makedirs(f"database/{self.table.name}/pagerange_{last_pagerange_index + 1}/tail")
                 insert_path = f"database/{self.table.name}/pagerange_{last_pagerange_index + 1}/base/page_0.csv"
-                self.table.bufferpool.write_page(new_page, insert_path)
+                self.table.bufferpool.write_to_disk(new_page, insert_path)
         else:
             insert_path = last_location_path
             last_page.write(record)
-            self.table.bufferpool.write_page(last_page, insert_path)
+            self.table.bufferpool.update_page(record, insert_path, last_page)
                    
         # Add new location to page directory 
         self.table.page_directory[f"b{self.current_base_rid}"] = insert_path
