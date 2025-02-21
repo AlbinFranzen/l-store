@@ -7,9 +7,11 @@ class Frame:
 
     def set_page(self, new_page):
         self.page = new_page
+        self.set_dirty_bit()  # Mark as dirty when page is modified
 
     def clear_page(self):
         self.page = None
+        self.set_dirty_bit()
 
     def set_page_path(self, new_page_path):
         self.page_path = new_page_path
