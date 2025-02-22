@@ -80,7 +80,12 @@ class Query:
         page_range_index = len(self.table.page_ranges) - 1
 
         # add new location to page directory
-        self.table.page_directory[lineage[0].rid].append([page_range_index, tail_page_index, offset])
+        delete_path = f"database/{self.table.name}/pagerange_{page_range_index}/tail/page_{tail_page_index}.csv"
+        #update page directory with delete path
+        if lineage[0].rid not in self.table.page_directory:
+            self.table.page_directory[lineage[0].rid] = []
+        self.table.page_directory[lineage[0].rid].append(delete_path)
+        #self.table.page_directory[lineage[0].rid].append([page_range_index, tail_page_index, offset])
 
         # update tail rid
         self.update_tail_rid()
@@ -129,7 +134,10 @@ class Query:
             self.table.bufferpool.update_page(record, insert_path, last_page)
                    
         # Add new location to page directory 
-        self.table.page_directory[f"b{self.current_base_rid}"] = insert_path
+        if f"b{self.current_base_rid}" not in self.table.page_directory:
+            self.table.page_directory[f"b{self.current_base_rid}"] = []
+        self.table.page_directory[f"b{self.current_base_rid}"].append(insert_path)
+        #self.table.page_directory[f"b{self.current_base_rid}"] = insert_path
         self.current_base_rid += 1
         return True
     
@@ -287,7 +295,11 @@ class Query:
         page_range_index = len(self.table.page_ranges) - 1 
         
         # Add new location to page directory 
-        self.table.page_directory[lineage[0].rid].append([page_range_index, tail_page_index, offset])
+        update_path = f"database/{self.table.name}/pagerange_{page_range_index}/tail/page_{tail_page_index}.csv"
+        if lineage[0].rid not in self.table.page_directory:
+            self.table.page_directory[lineage[0].rid] = []
+        self.table.page_directory[lineage[0].rid].append(update_path)
+        #self.table.page_directory[lineage[0].rid].append([page_range_index, tail_page_index, offset])
         self.current_tail_rid += 1
         return True
 
