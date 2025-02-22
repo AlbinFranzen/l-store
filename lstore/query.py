@@ -188,6 +188,13 @@ class Query:
     
     # Get list of records from base_rid
     def _traverse_lineage(self, base_rid):
+        """
+        Get the lineage of rid from bufferpool
+        Args: 
+            base_rid: str
+        Returns:
+            lineage: list of Record objects
+        """
         lineage = []
         if isinstance(base_rid, bytes):
             base_rid = base_rid.decode()  # Ensure base_rid is a string
@@ -197,13 +204,26 @@ class Query:
 
         page_entries = self.table.page_directory[base_rid]
 
-        for i, (page_range_index, page_index, offset) in enumerate(page_entries): # Loop through the page entries
-            page_range = self.table.page_ranges[page_range_index]
+        # Loop through the page entries to get the lineage
+        for i, (page_range_index, page_index, offset) in enumerate(page_entries): 
+            # page_range = self.table.page_ranges[page_range_index]
+
             if i == 0: # First record comes from the base page.   
-                current_record = page_range.base_pages[page_index].read_index(offset)
+                # current_record = page_range.base_pages[page_index].read_index(offset)
+                page_path = f"database/{self.table.name}/pagerange_{page_range_index}/base/page_{page_index}.csv"
             else: # Subsequent records come from tail pages.
-                current_record = page_range.tail_pages[page_index].read_index(offset)        
+                # current_record = page_range.tail_pages[page_index].read_index(offset)  
+                page_path = f"database/{self.table.name}/pagerange_{page_range_index}/tail/page_{page_index}.csv"      
+            
+            # Get page from bufferpool
+            page = self.table.bufferpool.get_page(page_path)
+            if page is None:
+                continue
+
+            current_record = page.read_index(offset)
             lineage.append(current_record)
+
+            # Traverse the lineage if indirection is not None or is the base_rid
             if current_record.indirection is None or current_record.indirection == base_rid:
                 break
         return lineage
