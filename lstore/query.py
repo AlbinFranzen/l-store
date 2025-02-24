@@ -100,7 +100,7 @@ class Query:
         record = Record(None, f"b{self.current_base_rid}", time.time(), [0] * len(columns), [*columns]) # Create record
         self.table.index.add_record(record) # Add record to index
         
-        # Get last page from bufferpool
+         # Get last page from bufferpool
         last_path = self.table.last_path
         self.table.bufferpool.add_frame(last_path) # Add last page frame to bufferpool
         last_page = self.table.bufferpool.get_page(last_path) # Get frame with last page from bufferpool
@@ -112,10 +112,12 @@ class Query:
         if last_page.has_capacity(): # If space in last page, write to last page
             last_page.write(record)
             insert_path = self.table.last_path
+            offset = last_page.num_records - 1
         else: # Else create new page
             new_page = Page()
             new_page.write(record)
-            
+            insert_path = last_path
+            offset = 0
             if last_page_index < PAGE_RANGE_SIZE: # If space in page range, write to new page in page range
                 insert_path = f"database/{self.table.name}/pagerange_{last_pagerange_index}/base/page_{last_page_index + 1}.csv"
             else: # If no space in page range, create new page range
@@ -129,7 +131,7 @@ class Query:
             self.table.bufferpool.add_frame(insert_path, new_page)
                    
         # Add new location to page directory 
-        self.table.page_directory[f"b{self.current_base_rid}"] = insert_path
+        self.table.page_directory[f"b{self.current_base_rid}"] = [insert_path, offset]
         self.current_base_rid += 1
         return True
     
@@ -187,17 +189,26 @@ class Query:
         if base_rid not in self.table.page_directory:
             return []
 
-        page_entries = self.table.page_directory[base_rid]
-
-        for i, (page_range_index, page_index, offset) in enumerate(page_entries): # Loop through the page entries
-            page_range = self.table.page_ranges[page_range_index]
-            if i == 0: # First record comes from the base page.   
-                current_record = page_range.base_pages[page_index].read_index(offset)
-            else: # Subsequent records come from tail pages.
-                current_record = page_range.tail_pages[page_index].read_index(offset)        
-            lineage.append(current_record)
-            if current_record.indirection is None or current_record.indirection == base_rid:
+        # Get the path from page directory
+        base_path, base_offset = self.table.page_directory[base_rid]
+        
+        # Read the base record
+        base_page = self.table.bufferpool.get_page(base_path)
+        base_record = base_page.read_index(base_offset)
+        lineage.append(base_record)
+        
+        # Follow indirection chain through tail records
+        current_rid = base_record.indirection
+        while current_rid and current_rid != base_rid:
+            if current_rid in self.table.page_directory:
+                tail_path, offset = self.table.page_directory[current_rid]
+                tail_page = self.table.bufferpool.get_page(tail_path)
+                tail_record = tail_page.read_index(offset)
+                lineage.append(tail_record)
+                current_rid = tail_record.indirection
+            else:
                 break
+
         return lineage
     
     """
@@ -276,57 +287,22 @@ class Query:
         lineage[-1].indirection = record.rid   # tail record's rid
         
         # Make sure space exists
-        database_dir = f"database/{self.table.name}"
-        pagerange_list = sorted(os.listdir(database_dir))
-        last_pagerange = pagerange_list[-1]
-        pagerange_index = int(last_pagerange.split("_")[-1])
-        tail_dir = os.path.join(database_dir, last_pagerange, "tail")
-
-        if not os.path.exists(tail_dir):
-            os.makedirs(tail_dir, exist_ok=True)
-
-        # Get all tail pages in the last pagerange
-        tail_list = sorted(os.listdir(tail_dir))
-
-        # If tail page exists, write to it
-        if tail_list:
-            last_tailpage_index = len(tail_list) - 1
-            last_tailpage_path = os.path.join(database_dir, last_pagerange, "tail", f"page_{last_tailpage_index}.csv")
-            tail_page = self.table.bufferpool.get_page(last_tailpage_path)
-            # If tail page is full, create a new one
-            if not tail_page.has_capacity():
-                # If pagerange has space, write to new tail page
-                if last_tailpage_index < PAGE_RANGE_SIZE - 1:
-                    new_tailpage_path = os.path.join(database_dir, last_pagerange, "tail", f"page_{last_tailpage_index + 1}.csv")
-                    new_tailpage = Page()
-                    self.table.bufferpool.write_to_disk(new_tailpage, new_tailpage_path)
-                    tail_page = self.table.bufferpool.get_page(new_tailpage_path)
-                else:
-                    # Create a new pagerange
-                    pagerange_index += 1
-                    new_pagerange_path = os.path.join(database_dir, f"pagerange_{pagerange_index}")
-                    os.makedirs(os.path.join(new_pagerange_path, "base"), exist_ok=True)
-                    os.makedirs(os.path.join(new_pagerange_path, "tail"), exist_ok=True)
-                    # Create a new tail page in the new pagerange
-                    new_tail_page_path = os.path.join(new_pagerange_path, "tail", "page_0.csv")
-                    self.table.bufferpool.write_to_disk(Page(), new_tail_page_path)
-                    tail_page = self.table.bufferpool.get_page(new_tail_page_path)
-        else:
-            # If no tali page exists, create one
-            new_tail_page_path = os.path.join(database_dir, last_pagerange, "tail", "page_0.csv")
-            new_page = Page()
-            self.table.bufferpool.write_to_disk(new_page, new_tail_page_path)
-            tail_page = self.table.bufferpool.get_page(new_tail_page_path)
+        if not self.table.page_ranges[-1].has_capacity(): # If page range is full, create new one
+            #self.table.page_ranges.append(PageRange())
+            pass
+        if not self.table.page_ranges[-1].tail_pages[-1].has_capacity(): # If base page is full, create new one
+            self.table.page_ranges[-1].tail_pages.append(Page())
+            
+        # Write and get location 
+        offset = self.table.page_ranges[-1].tail_pages[-1].write(record) 
+        tail_page_index = len(self.table.page_ranges[-1].tail_pages) - 1
+        page_range_index = len(self.table.page_ranges) - 1 
         
         # Add new location to page directory 
         self.table.page_directory[lineage[0].rid].append([page_range_index, tail_page_index, offset])
         self.current_tail_rid += 1
         return True
 
-        # Update tail rid
-        self.update_tail_rid()
-
-        return True
     
     """
     :param start_range: int         # Start of the key range to aggregate 
