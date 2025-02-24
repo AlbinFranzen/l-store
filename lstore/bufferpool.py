@@ -24,12 +24,6 @@ class BufferPool:
         if page_path in self.frames:
             frame = self.frames.pop(page_path)
             self.frames[page_path] = frame
-            
-    def is_full(self):
-        """
-        Check if buffer pool is full
-        """
-        return len(self.frames) >= self.pool_size
         
     def evict_page(self):
         """
@@ -37,7 +31,7 @@ class BufferPool:
         Returns:
             True if page was evicted, False if no page could be evicted
         """            
-        if not self.is_full():
+        if len(self.frames) <= self.pool_size:
             return True
         
         try:
@@ -65,7 +59,7 @@ class BufferPool:
             print(f"Error during page eviction: {e}")
             return False
         
-    def add_frame(self, page_path):
+    def add_frame(self, page_path, page_data=None):
         """
         Add a new frame to the buffer pool using a page path
         Args:
@@ -79,13 +73,14 @@ class BufferPool:
             return self.frames[page_path]
             
         # Try to make space if needed
-        if self.is_full() and not self.evict_page():
+        if len(self.frames) <= self.pool_size and not self.evict_page():
             return None
             
         # Read page data from disk
-        page_data = self.read_from_disk(page_path)
         if page_data is None:
-            return None
+            page_data = self.read_from_disk(page_path)
+            if page_data is None:
+                return None
         
         # Create new frame and add to pool
         new_frame = Frame(page=page_data, page_path=page_path)
@@ -142,7 +137,7 @@ class BufferPool:
         # Try to get from buffer pool first
         frame = self.frames.get(page_path)
         if frame:
-            frame.increment_page_count()
+            frame.increment_pin_count()
             self._update_lru(page_path)
             return frame.page
 
@@ -160,7 +155,7 @@ class BufferPool:
         
         return page_data
     
-    def update_page(self, page_path, new_page):
+    def update_page(self, page_path, make_dirty=False):
         """
         Update a page in the buffer pool or disk
         Args:
@@ -170,15 +165,9 @@ class BufferPool:
             True if successful, False if error
         """
         # Check if page is in buffer pool
-        for frame in self.frames:
-            if frame.page_path == page_path:
-                frame.set_page(new_page)
-                frame.set_dirty_bit()
-                return True
-
-        # If not in buffer pool, write to disk
-        if not self.write_to_disk(page_path, new_page):
-            return False
+        frame = self.frames.get(page_path)
+        if frame and make_dirty:
+            frame.set_dirty_bit()
 
         return True
     

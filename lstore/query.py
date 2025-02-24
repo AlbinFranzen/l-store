@@ -80,12 +80,7 @@ class Query:
         page_range_index = len(self.table.page_ranges) - 1
 
         # add new location to page directory
-        delete_path = f"database/{self.table.name}/pagerange_{page_range_index}/tail/page_{tail_page_index}.csv"
-        #update page directory with delete path
-        if lineage[0].rid not in self.table.page_directory:
-            self.table.page_directory[lineage[0].rid] = []
-        self.table.page_directory[lineage[0].rid].append(delete_path)
-        #self.table.page_directory[lineage[0].rid].append([page_range_index, tail_page_index, offset])
+        self.table.page_directory[lineage[0].rid].append([page_range_index, tail_page_index, offset])
 
         # update tail rid
         self.update_tail_rid()
@@ -100,44 +95,41 @@ class Query:
     # FOR BASE PAGES
     """
     def insert(self, *columns):
-         # Verify input
-        if not self._verify_insert_input(*columns):
+        if not self._verify_insert_input(*columns): # Verify input
             return False
+        record = Record(None, f"b{self.current_base_rid}", time.time(), [0] * len(columns), [*columns]) # Create record
+        self.table.index.add_record(record) # Add record to index
         
-        # Create record
-        record = Record(None, f"b{self.current_base_rid}", time.time(), [0] * len(columns), [*columns])
+        # Get last page from bufferpool
+        last_path = self.table.last_path
+        self.table.bufferpool.add_frame(last_path) # Add last page frame to bufferpool
+        last_page = self.table.bufferpool.get_page(last_path) # Get frame with last page from bufferpool
         
-        # Add record to index
-        self.table.index.add_record(record)
+        # Check if space exists
+        last_pagerange_index = int(last_path.split('pagerange_')[1].split('/')[0])
+        last_page_index = int(last_path.split('page_')[1].split('.')[0])
         
-        # Ensure space exists
-        last_pagerange_index = len(os.listdir(f'database/{self.table.name}')) - 1
-        last_page_index = len(os.listdir(f'database/{self.table.name}/pagerange_{last_pagerange_index}')) - 1
-        
-        last_location_path = f"database/{self.table.name}/pagerange_{last_pagerange_index}/base/page_{last_page_index}.csv"
-        
-        last_page = self.table.bufferpool.get_page(last_location_path)
-        if not last_page.has_capacity():
+        if last_page.has_capacity(): # If space in last page, write to last page
+            last_page.write(record)
+            insert_path = self.table.last_path
+        else: # Else create new page
             new_page = Page()
             new_page.write(record)
-            if last_page_index < PAGE_RANGE_SIZE: # If space in page_range, write to new page in page_range
+            
+            if last_page_index < PAGE_RANGE_SIZE: # If space in page range, write to new page in page range
                 insert_path = f"database/{self.table.name}/pagerange_{last_pagerange_index}/base/page_{last_page_index + 1}.csv"
-                self.table.bufferpool.write_to_disk(new_page, insert_path)
-            else: # Else create new page_range
-                os.makedirs(f"database/{self.table.name}/pagerange_{last_pagerange_index + 1}/base")
-                os.makedirs(f"database/{self.table.name}/pagerange_{last_pagerange_index + 1}/tail")
-                insert_path = f"database/{self.table.name}/pagerange_{last_pagerange_index + 1}/base/page_0.csv"
-                self.table.bufferpool.write_to_disk(new_page, insert_path)
-        else:
-            insert_path = last_location_path
-            last_page.write(record)
-            self.table.bufferpool.update_page(record, insert_path, last_page)
+            else: # If no space in page range, create new page range
+                new_pagerange_path = f"database/{self.table.name}/pagerange_{last_pagerange_index + 1}"
+                os.makedirs(f"{new_pagerange_path}/base")
+                os.makedirs(f"{new_pagerange_path}/tail") 
+                insert_path = f"{new_pagerange_path}/base/page_0.csv"
+            
+            # Add new page to bufferpool
+            self.table.last_path = insert_path
+            self.table.bufferpool.add_frame(insert_path, new_page)
                    
         # Add new location to page directory 
-        if f"b{self.current_base_rid}" not in self.table.page_directory:
-            self.table.page_directory[f"b{self.current_base_rid}"] = []
-        self.table.page_directory[f"b{self.current_base_rid}"].append(insert_path)
-        #self.table.page_directory[f"b{self.current_base_rid}"] = insert_path
+        self.table.page_directory[f"b{self.current_base_rid}"] = insert_path
         self.current_base_rid += 1
         return True
     
@@ -188,13 +180,6 @@ class Query:
     
     # Get list of records from base_rid
     def _traverse_lineage(self, base_rid):
-        """
-        Get the lineage of rid from bufferpool
-        Args: 
-            base_rid: str
-        Returns:
-            lineage: list of Record objects
-        """
         lineage = []
         if isinstance(base_rid, bytes):
             base_rid = base_rid.decode()  # Ensure base_rid is a string
@@ -204,26 +189,13 @@ class Query:
 
         page_entries = self.table.page_directory[base_rid]
 
-        # Loop through the page entries to get the lineage
-        for i, (page_range_index, page_index, offset) in enumerate(page_entries): 
-            # page_range = self.table.page_ranges[page_range_index]
-
+        for i, (page_range_index, page_index, offset) in enumerate(page_entries): # Loop through the page entries
+            page_range = self.table.page_ranges[page_range_index]
             if i == 0: # First record comes from the base page.   
-                # current_record = page_range.base_pages[page_index].read_index(offset)
-                page_path = f"database/{self.table.name}/pagerange_{page_range_index}/base/page_{page_index}.csv"
+                current_record = page_range.base_pages[page_index].read_index(offset)
             else: # Subsequent records come from tail pages.
-                # current_record = page_range.tail_pages[page_index].read_index(offset)  
-                page_path = f"database/{self.table.name}/pagerange_{page_range_index}/tail/page_{page_index}.csv"      
-            
-            # Get page from bufferpool
-            page = self.table.bufferpool.get_page(page_path)
-            if page is None:
-                continue
-
-            current_record = page.read_index(offset)
+                current_record = page_range.tail_pages[page_index].read_index(offset)        
             lineage.append(current_record)
-
-            # Traverse the lineage if indirection is not None or is the base_rid
             if current_record.indirection is None or current_record.indirection == base_rid:
                 break
         return lineage
@@ -315,11 +287,7 @@ class Query:
         page_range_index = len(self.table.page_ranges) - 1 
         
         # Add new location to page directory 
-        update_path = f"database/{self.table.name}/pagerange_{page_range_index}/tail/page_{tail_page_index}.csv"
-        if lineage[0].rid not in self.table.page_directory:
-            self.table.page_directory[lineage[0].rid] = []
-        self.table.page_directory[lineage[0].rid].append(update_path)
-        #self.table.page_directory[lineage[0].rid].append([page_range_index, tail_page_index, offset])
+        self.table.page_directory[lineage[0].rid].append([page_range_index, tail_page_index, offset])
         self.current_tail_rid += 1
         return True
 

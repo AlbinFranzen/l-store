@@ -3,6 +3,7 @@ from lstore.index import Index
 from time import time
 # from lstore.page_range import PageRange
 from lstore.bufferpool import BufferPool
+from lstore.page import Page
 
 INDIRECTION_COLUMN = 0
 RID_COLUMN = 1
@@ -37,21 +38,21 @@ class Table:
         self.path = os.path.join("database", name)
         self.page_directory = {}
         self.index = Index(self)
-        self.bufferpool = BufferPool(self.path)
-        
-        if not os.path.exists(self.path):
-            os.makedirs(self.path)
-            
+        self.bufferpool = BufferPool(self.path)    
         self._init_page_range_storage()
+        self.last_path = os.path.join(self.path, "pagerange_0/base/page_0")
         
     def _init_page_range_storage(self):
         """Creates initial page range directory and storage"""
-        init_page_range_path = os.path.join(self.path, "pagerange_0")
-        if not os.path.exists(init_page_range_path):
-            os.makedirs(init_page_range_path)
-            # Create base and tail directories within the page range
-            os.makedirs(os.path.join(init_page_range_path, "base"))
-            os.makedirs(os.path.join(init_page_range_path, "tail"))
+        base_path = os.path.join(self.path, "pagerange_0/base")
+        tail_path = os.path.join(self.path, "pagerange_0/tail")
+        
+        os.makedirs(base_path, exist_ok=True)
+        os.makedirs(tail_path, exist_ok=True)
+        
+        for path in [base_path, tail_path]:
+            with open(os.path.join(path, "page_0"), 'wb') as f:
+                f.write(Page().serialize())
         
     def __repr__(self):
         return f"Name: {self.name}\nKey: {self.key}\nNum columns: {self.num_columns}\nPage_ranges: {self.page_ranges}\nPage_directory: {self.page_directory}\nindex: {self.index}"
