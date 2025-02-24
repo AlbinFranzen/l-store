@@ -129,7 +129,7 @@ class Query:
             self.table.bufferpool.add_frame(insert_path, new_page)
                    
         # Add new location to page directory 
-        self.table.page_directory[f"b{self.current_base_rid}"] = [insert_path, offset]
+        self.table.page_directory[f"b{self.current_base_rid}"] = [[insert_path, offset]]
         self.current_base_rid += 1
         return True
     
@@ -187,25 +187,11 @@ class Query:
         if base_rid not in self.table.page_directory:
             return []
 
-        # Get the path from page directory
-        base_path, base_offset = self.table.page_directory[base_rid]
-        
-        # Read the base record
-        base_page = self.table.bufferpool.get_page(base_path)
-        base_record = base_page.read_index(base_offset)
-        lineage.append(base_record)
-        
-        # Follow indirection chain through tail records
-        current_rid = base_record.indirection
-        while current_rid and current_rid != base_rid:
-            if current_rid in self.table.page_directory:
-                tail_path, offset = self.table.page_directory[current_rid]
-                tail_page = self.table.bufferpool.get_page(tail_path)
-                tail_record = tail_page.read_index(offset)
-                lineage.append(tail_record)
-                current_rid = tail_record.indirection
-            else:
-                break
+        # Traverse through base and tail records
+        for path, offset in self.table.page_directory[base_rid]:
+            page = self.table.bufferpool.get_page(path)
+            record = page.read_index(offset)
+            lineage.append(record)
 
         return lineage
     
@@ -281,14 +267,14 @@ class Query:
         )
         
         # Update base record's schema encoding 
-        base_path, offset = self.table.page_directory[base_rid]
+        base_path, offset = self.table.page_directory[base_rid][0]
         self.table.bufferpool.add_frame(base_path)
         base_page = self.table.bufferpool.get_page(base_path)
         base_page.data[offset].schema_encoding = record.schema_encoding
         
         # Update last tail record's rid to new record's rid 
         last_lin_rid = lineage[-1].rid
-        last_lin_path, offset = self.table.page_directory[last_lin_rid]
+        last_lin_path, offset = self.table.page_directory[base_rid][-1]
         self.table.bufferpool.add_frame(last_lin_path)
         last_lin_page = self.table.bufferpool.get_page(last_lin_path)
         last_lin_page.data[offset].indirection = record.rid
@@ -318,7 +304,7 @@ class Query:
             self.table.bufferpool.add_frame(insert_path, new_page)
         
         # Add new location to page directory 
-        self.table.page_directory[lineage[0].rid] = [insert_path, offset]
+        self.table.page_directory[lineage[0].rid].append([insert_path, offset])
         self.current_tail_rid += 1
         return True
 
