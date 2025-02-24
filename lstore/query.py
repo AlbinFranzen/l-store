@@ -66,27 +66,25 @@ class Query:
         lineage[-1].indirection = delete_record.rid
 
         # ensure space exists
-        if not self.table.page_ranges[-1].tail_pages[-1].has_capacity():
-            self.table.page_ranges[-1].tail_pages.append(Page())
         if not self.table.page_ranges[-1].has_capacity():
-            self.table.page_ranges.append(PageRange())
-        
-        # add record in index
-        self.table.index.add_record(delete_record)
+            pass
+        if not self.table.page_ranges[-1].tail_pages[-1].has_capacity():
+            self.table.page_ranges[-1].tail_pages.append(Page())   
 
-        # insert tail record
+        # write record to tail page
         offset = self.table.page_ranges[-1].tail_pages[-1].write(delete_record)
         tail_page_index = len(self.table.page_ranges[-1].tail_pages) - 1
         page_range_index = len(self.table.page_ranges) - 1
 
-        # add new location to page directory
+        # update page directory
+        if lineage[0].rid in self.table.page_directory:
+            self.table.page_directory[lineage[0].rid] = []
         self.table.page_directory[lineage[0].rid].append([page_range_index, tail_page_index, offset])
 
         # update tail rid
         self.update_tail_rid()
 
         return True
-        pass
     
     """
     # Insert a record with specified columns
