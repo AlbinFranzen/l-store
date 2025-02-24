@@ -1,7 +1,7 @@
 import os
 from lstore.index import Index
 from time import time
-#from lstore.page_range import PageRange
+# from lstore.page_range import PageRange
 from lstore.bufferpool import BufferPool
 
 INDIRECTION_COLUMN = 0

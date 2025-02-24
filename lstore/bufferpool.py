@@ -1,8 +1,7 @@
 from lstore.config import POOL_SIZE
 from collections import OrderedDict
 import os
-
-from lstore.page import Page
+from lstore.frame import Frame
 
 
 class BufferPool:
@@ -10,6 +9,9 @@ class BufferPool:
         """
         Initialize buffer pool with specified size
         """
+        # Import here to avoid circular import
+        from lstore.page import Page
+        self.Page = Page
         self.table_path = table_path
         self.pool_size = POOL_SIZE
         # Use OrderedDict to implement LRU - most recently used items are at the end
@@ -124,7 +126,7 @@ class BufferPool:
                 
             with open(page_path, 'rb') as f:
                 data = f.read()
-            return Page.deserialize(data)  # need to implement page de-serializing
+            return self.Page.deserialize(data)  # Use the stored Page class
         except Exception as e:
             print(f"Error reading from disk: {e}")
             return None

@@ -1,4 +1,5 @@
 from lstore.config import PAGE_RECORD_SIZE
+import msgpack
 
 class Page:
     def __init__(self):
@@ -28,3 +29,61 @@ class Page:
 
     def read_index(self, index):  # Read record at index
         return self.data[index]
+
+    def serialize(self):
+        """
+        Serialize page data into bytes for disk storage
+        Returns:
+            bytes: Serialized page data
+        """
+        page_data = {
+            'num_records': self.num_records,
+            'records': []
+        }
+        
+        # Serialize each record
+        for record in self.data:
+            record_data = {
+                'indirection': record.indirection,
+                'rid': record.rid,
+                'time_stamp': record.time_stamp,
+                'schema_encoding': record.schema_encoding,
+                'columns': record.columns
+            }
+            page_data['records'].append(record_data)
+            
+        return msgpack.packb(page_data)
+
+    @classmethod 
+    def deserialize(cls, data):
+        """
+        Deserialize bytes data into a Page object
+        Args:
+            data (bytes): Serialized page data
+        Returns:
+            Page: Reconstructed page object
+        """
+        # Import here to avoid circular import
+        from lstore.table import Record
+        
+        # Create new page
+        page = cls()
+        
+        # Unpack the serialized data
+        page_data = msgpack.unpackb(data)
+        
+        # Set page metadata
+        page.num_records = page_data['num_records']
+        
+        # Reconstruct records
+        for record_data in page_data['records']:
+            record = Record(
+                record_data['indirection'],
+                record_data['rid'], 
+                record_data['time_stamp'],
+                record_data['schema_encoding'],
+                record_data['columns']
+            )
+            page.data.append(record)
+            
+        return page
