@@ -60,6 +60,7 @@ class BufferPool:
             return False
         
     def add_frame(self, page_path, page_data=None):
+        
         """
         Add a new frame to the buffer pool using a page path
         Args:

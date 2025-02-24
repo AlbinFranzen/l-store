@@ -117,12 +117,18 @@ class Query:
             insert_path = last_path
             offset = 0
             if last_page_index < PAGE_RANGE_SIZE: # If space in page range, write to new page in page range
-                insert_path = f"database/{self.table.name}/pagerange_{last_pagerange_index}/base/page_{last_page_index + 1}.csv"
+                insert_path = f"database/{self.table.name}/pagerange_{last_pagerange_index}/base/page_{last_page_index + 1}"
             else: # If no space in page range, create new page range
                 new_pagerange_path = f"database/{self.table.name}/pagerange_{last_pagerange_index + 1}"
                 os.makedirs(f"{new_pagerange_path}/base")
                 os.makedirs(f"{new_pagerange_path}/tail") 
-                insert_path = f"{new_pagerange_path}/base/page_0.csv"
+                insert_path = f"{new_pagerange_path}/base/page_0"
+                with open(f"{new_pagerange_path}/tail/page_0", 'wb') as f:
+                    f.write(Page().serialize()) # create tail page
+        
+            with open(insert_path, 'wb') as f:
+                f.write(Page().serialize()) # create base page
+            
             
             # Add new page to bufferpool
             self.table.last_path = insert_path
@@ -258,12 +264,7 @@ class Query:
             return False  # or handle this appropriately
 
         # Now access lineage safely
-        record = Record(
-            lineage[0].rid,  # Base RID of lineage
-            "t" + str(self.current_tail_rid),
-            time.time(),
-            lineage[0].schema_encoding,  # Retain schema encoding
-            [*columns]  # Columns could be updated if needed
+        record = Record(lineage[0].rid, "t" + str(self.current_tail_rid), time.time(), [1 if [*columns][i] is not None else lineage[-1].schema_encoding[i] for i in range(len([*columns]))],[*columns]  # Columns could be updated if needed
         )
         
         # Update base record's schema encoding 
@@ -297,7 +298,9 @@ class Query:
             new_page.write(record)
             insert_path = last_tail_path
             offset = 0
-            insert_path = f"database/{self.table.name}/pagerange_{base_pagerange_index}/tail/page_{last_tail_index + 1}.csv"
+            insert_path = f"database/{self.table.name}/pagerange_{base_pagerange_index}/tail/page_{last_tail_index + 1}"
+            with open(insert_path, 'wb') as f:
+                f.write(Page().serialize())
             
             # Add new page to bufferpool
             self.table.last_path = insert_path
