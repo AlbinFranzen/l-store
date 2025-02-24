@@ -281,25 +281,46 @@ class Query:
             lineage[0].schema_encoding,  # Retain schema encoding
             [*columns]  # Columns could be updated if needed
         )
-
-        # Update old records
-        lineage[0].schema_encoding = record.schema_encoding # update base record's schema encoding
-        lineage[-1].indirection = record.rid   # tail record's rid
         
-        # Make sure space exists
-        if not self.table.page_ranges[-1].has_capacity(): # If page range is full, create new one
-            #self.table.page_ranges.append(PageRange())
-            pass
-        if not self.table.page_ranges[-1].tail_pages[-1].has_capacity(): # If base page is full, create new one
-            self.table.page_ranges[-1].tail_pages.append(Page())
+        # Update base record's schema encoding 
+        base_path, offset = self.table.page_directory[base_rid]
+        self.table.bufferpool.add_frame(base_path)
+        base_page = self.table.bufferpool.get_page(base_path)
+        base_page.data[offset].schema_encoding = record.schema_encoding
+        
+        # Update last tail record's rid to new record's rid 
+        last_lin_rid = lineage[-1].rid
+        last_lin_path, offset = self.table.page_directory[last_lin_rid]
+        self.table.bufferpool.add_frame(last_lin_path)
+        last_lin_page = self.table.bufferpool.get_page(last_lin_path)
+        last_lin_page.data[offset].indirection = record.rid
+        
+        # Get the final tail page location
+        base_pagerange_index = int(base_path.split("pagerange_")[1].split("/")[0])
+        tail_dir = os.path.join(self.table.path, f"pagerange_{base_pagerange_index}", "tail")
+        tail_files = [f for f in os.listdir(tail_dir) if f.startswith("page_")]
+        last_tail_index = max((int(f.split("page_")[1]) for f in tail_files), default=0)
+        last_tail_path = f"database/{self.table.name}/pagerange_{base_pagerange_index}/tail/page_{last_tail_index}"
+        
+        # Ensure space exists and write to final tail page
+        last_page = self.table.bufferpool.get_page(last_tail_path)
+        if last_page.has_capacity(): # If space in last page, write to last page
+            last_page.write(record)
+            insert_path = last_tail_path
+            offset = last_page.num_records - 1
+        else: # Else create new page
+            new_page = Page()
+            new_page.write(record)
+            insert_path = last_tail_path
+            offset = 0
+            insert_path = f"database/{self.table.name}/pagerange_{base_pagerange_index}/tail/page_{last_tail_index + 1}.csv"
             
-        # Write and get location 
-        offset = self.table.page_ranges[-1].tail_pages[-1].write(record) 
-        tail_page_index = len(self.table.page_ranges[-1].tail_pages) - 1
-        page_range_index = len(self.table.page_ranges) - 1 
+            # Add new page to bufferpool
+            self.table.last_path = insert_path
+            self.table.bufferpool.add_frame(insert_path, new_page)
         
         # Add new location to page directory 
-        self.table.page_directory[lineage[0].rid].append([page_range_index, tail_page_index, offset])
+        self.table.page_directory[lineage[0].rid] = [insert_path, offset]
         self.current_tail_rid += 1
         return True
 
