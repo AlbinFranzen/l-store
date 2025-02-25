@@ -41,6 +41,31 @@ class Table:
         self.bufferpool = BufferPool(self.path)    
         self._init_page_range_storage()
         self.last_path = os.path.join(self.path, "pagerange_0/base/page_0")
+        # Add a record cache to minimize disk reads
+        self.record_cache = {}  # {primary_key: record}
+        self.max_cache_size = 10000
+        
+    def cache_record(self, key, record):
+        """
+        Store frequently accessed records in memory
+        """
+        # Simple LRU: remove random entry if full
+        if len(self.record_cache) >= self.max_cache_size:
+            self.record_cache.pop(next(iter(self.record_cache)))
+        self.record_cache[key] = record
+        
+    def get_cached_record(self, key):
+        """
+        Get record from cache if available
+        """
+        return self.record_cache.get(key)
+        
+    def invalidate_cache(self, key):
+        """
+        Remove record from cache when updated
+        """
+        if key in self.record_cache:
+            del self.record_cache[key]
         
     def _init_page_range_storage(self):
         """Creates initial page range directory and storage"""

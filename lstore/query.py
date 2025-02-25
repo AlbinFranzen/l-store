@@ -28,9 +28,6 @@ class Query:
         self.current_base_rid += 1
         pass
     
-    def update_tail_rid(self):
-        self.current_tail_rid += 1
-        pass
     
     """
     # internal Method
@@ -50,40 +47,53 @@ class Query:
         if not base_rid:
             return False
 
-        # get all records in lineage
-        lineage = self._traverse_lineage(base_rid)
+        # Get base and last tail records
+        base_path, base_offset = self.table.page_directory[base_rid][0]
+        base_record = self.table.bufferpool.get_page(base_path).read_index(base_offset)
+        last_tail_path, last_tail_offset = self.table.page_directory[base_rid][-1]
+        last_tail_record = self.table.bufferpool.get_page(last_tail_path).read_index(last_tail_offset)
 
         # create a new tail record
-        delete_record = Record(
-                        lineage[-1].rid,
+        record = Record(
+                        last_tail_record.rid,
                         "t" + str(self.current_tail_rid),
                         time.time(),
-                        schema_encoding = [0] * len(lineage[0].schema_encoding),
-                        columns = [None] * len(lineage[0].columns)
+                        schema_encoding = [0] * len(base_record.schema_encoding),
+                        columns = [None] * len(base_record.columns)
                     )
         
         # update tail record's rid
-        lineage[-1].indirection = delete_record.rid
+        last_tail_record.indirection = record.rid
 
-        # ensure space exists
-        if not self.table.page_ranges[-1].has_capacity():
-            pass
-        if not self.table.page_ranges[-1].tail_pages[-1].has_capacity():
-            self.table.page_ranges[-1].tail_pages.append(Page())   
-
-        # write record to tail page
-        offset = self.table.page_ranges[-1].tail_pages[-1].write(delete_record)
-        tail_page_index = len(self.table.page_ranges[-1].tail_pages) - 1
-        page_range_index = len(self.table.page_ranges) - 1
+        # Get the final tail page location
+        base_pagerange_index = int(base_path.split("pagerange_")[1].split("/")[0])
+        tail_dir = os.path.join(self.table.path, f"pagerange_{base_pagerange_index}", "tail")
+        tail_files = [f for f in os.listdir(tail_dir) if f.startswith("page_")]
+        last_tail_index = max((int(f.split("page_")[1]) for f in tail_files), default=0)
+        last_tail_path = f"database/{self.table.name}/pagerange_{base_pagerange_index}/tail/page_{last_tail_index}"
+        
+        # Ensure space exists and write to final tail page
+        last_page = self.table.bufferpool.get_page(last_tail_path)
+        if last_page.has_capacity(): # If space in last page, write to last page
+            last_page.write(record)
+            insert_path = last_tail_path
+            offset = last_page.num_records - 1
+        else: # Else create new page
+            new_page = Page()
+            new_page.write(record)
+            insert_path = last_tail_path
+            offset = 0
+            insert_path = f"database/{self.table.name}/pagerange_{base_pagerange_index}/tail/page_{last_tail_index + 1}"
+            with open(insert_path, 'wb') as f:
+                f.write(Page().serialize())
+            
+            # Add new page to bufferpool
+            self.table.last_path = insert_path
+            self.table.bufferpool.add_frame(insert_path, new_page)
 
         # update page directory
-        if lineage[0].rid in self.table.page_directory:
-            self.table.page_directory[lineage[0].rid] = []
-        self.table.page_directory[lineage[0].rid].append([page_range_index, tail_page_index, offset])
-
-        # update tail rid
-        self.update_tail_rid()
-
+        self.table.page_directory[base_record.rid].append([insert_path, offset])
+        self.current_tail_rid += 1
         return True
     
     """
@@ -100,7 +110,6 @@ class Query:
         
          # Get last page from bufferpool
         last_path = self.table.last_path
-        self.table.bufferpool.add_frame(last_path) # Add last page frame to bufferpool
         last_page = self.table.bufferpool.get_page(last_path) # Get frame with last page from bufferpool
         
         # Check if space exists
@@ -120,8 +129,8 @@ class Query:
                 insert_path = f"database/{self.table.name}/pagerange_{last_pagerange_index}/base/page_{last_page_index + 1}"
             else: # If no space in page range, create new page range
                 new_pagerange_path = f"database/{self.table.name}/pagerange_{last_pagerange_index + 1}"
-                os.makedirs(f"{new_pagerange_path}/base")
-                os.makedirs(f"{new_pagerange_path}/tail") 
+                os.makedirs(f"{new_pagerange_path}/base", exist_ok=True) 
+                os.makedirs(f"{new_pagerange_path}/tail", exist_ok=True)
                 insert_path = f"{new_pagerange_path}/base/page_0"
                 with open(f"{new_pagerange_path}/tail/page_0", 'wb') as f:
                     f.write(Page().serialize()) # create tail page
@@ -280,6 +289,14 @@ class Query:
         
         # Ensure space exists and write to final tail page
         last_page = self.table.bufferpool.get_page(last_tail_path)
+        
+        # If page is None, create a new one
+        if last_page is None:
+            last_page = Page()
+            with open(last_tail_path, 'wb') as f:
+                f.write(last_page.serialize())
+            self.table.bufferpool.add_frame(last_tail_path, last_page)
+            
         if last_page.has_capacity(): # If space in last page, write to last page
             last_page.write(record)
             insert_path = last_tail_path
@@ -312,23 +329,17 @@ class Query:
     # Returns False if no record exists in the given range
     """
     def sum(self, start_range, end_range, aggregate_column_index):
-        # Get all RIDs in the range (inclusive)
-        rid_combined_strings = self.table.index.locate_range(start_range, end_range, 0)
-        if rid_combined_strings == False:
+        # Use locate_range to obtain a dictionary mapping keys to decoded RID strings
+        rid_dict = self.table.index.locate_range(start_range, end_range, 0)
+        if not rid_dict:
             return False
-        
-        # Flatten the list of RIDs and split any combined RID strings
-        rids = []
-        for rid_string in rid_combined_strings:
-            rids.extend(rid_string.split(","))
-        
+        # Get the list of RID strings from the dictionary values
+        rids = list(rid_dict.values())
         range_sum = 0
-        # Get the merged record for each RID and add the specified column value
         for rid in rids:
             merged_record = self._get_merged_lineage(rid, [1] * self.table.num_columns)
             if merged_record and merged_record.columns[aggregate_column_index] is not None:
                 range_sum += merged_record.columns[aggregate_column_index]
-            
         return range_sum
       
     
