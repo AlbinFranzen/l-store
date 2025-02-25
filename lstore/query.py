@@ -19,8 +19,7 @@ class Query:
         self.table = table
         self.current_base_rid = 0
         self.current_tail_rid = 0
-        pass
-    
+        
     def __repr__(self):
         return f"Table:\n{self.table}\ncurrent_base_rid: {self.current_base_rid}\ncurrent_tail_rid: {self.current_tail_rid}"
     
@@ -36,7 +35,6 @@ class Query:
     # Return False if record doesn't exist or is locked due to 2PL
     """
     def delete(self, primary_key):
-
         # get rids with the primary key
         base_rid = self.table.index.locate(0, primary_key)
         if base_rid == False:
@@ -52,7 +50,8 @@ class Query:
         base_record = self.table.bufferpool.get_page(base_path).read_index(base_offset)
         last_tail_path, last_tail_offset = self.table.page_directory[base_rid][-1]
         last_tail_record = self.table.bufferpool.get_page(last_tail_path).read_index(last_tail_offset)
-
+        
+        
         # create a new tail record
         record = Record(
                         last_tail_record.rid,
@@ -63,33 +62,31 @@ class Query:
                     )
         
         # update tail record's rid
+        temp = last_tail_record.indirection
         last_tail_record.indirection = record.rid
 
-        # Get the final tail page location
+        # Get the final tail page location EFFICIENTLY using cache
         base_pagerange_index = int(base_path.split("pagerange_")[1].split("/")[0])
-        tail_dir = os.path.join(self.table.path, f"pagerange_{base_pagerange_index}", "tail")
-        tail_files = [f for f in os.listdir(tail_dir) if f.startswith("page_")]
-        last_tail_index = max((int(f.split("page_")[1]) for f in tail_files), default=0)
-        last_tail_path = f"database/{self.table.name}/pagerange_{base_pagerange_index}/tail/page_{last_tail_index}"
+        last_tail_path, last_tail_index = self.table.get_tail_page_location(base_pagerange_index)
         
         # Ensure space exists and write to final tail page
         last_page = self.table.bufferpool.get_page(last_tail_path)
-        if last_page.has_capacity(): # If space in last page, write to last page
+        
+        # If page is None or full, create a new tail page
+        if last_page is None or not last_page.has_capacity():
+            new_path, new_index = self.table.create_new_tail_page(base_pagerange_index)
+            new_page = Page()
+            new_page.write(record)
+            
+            # Add new page to buffer pool
+            self.table.bufferpool.add_frame(new_path, new_page)
+            insert_path = new_path
+            offset = 0
+        else:
+            # Use existing page
             last_page.write(record)
             insert_path = last_tail_path
             offset = last_page.num_records - 1
-        else: # Else create new page
-            new_page = Page()
-            new_page.write(record)
-            insert_path = last_tail_path
-            offset = 0
-            insert_path = f"database/{self.table.name}/pagerange_{base_pagerange_index}/tail/page_{last_tail_index + 1}"
-            with open(insert_path, 'wb') as f:
-                f.write(Page().serialize())
-            
-            # Add new page to bufferpool
-            self.table.last_path = insert_path
-            self.table.bufferpool.add_frame(insert_path, new_page)
 
         # update page directory
         self.table.page_directory[base_record.rid].append([insert_path, offset])
@@ -103,47 +100,38 @@ class Query:
     # FOR BASE PAGES
     """
     def insert(self, *columns):
-        if not self._verify_insert_input(*columns): # Verify input
+        if not self._verify_insert_input(*columns):
             return False
-        record = Record(None, f"b{self.current_base_rid}", time.time(), [0] * len(columns), [*columns]) # Create record
-        self.table.index.add_record(record) # Add record to index
+        record = Record(None, f"b{self.current_base_rid}", time.time(), [0] * len(columns), [*columns])
+        self.table.index.add_record(record)
         
-         # Get last page from bufferpool
         last_path = self.table.last_path
-        last_page = self.table.bufferpool.get_page(last_path) # Get frame with last page from bufferpool
+        last_page = self.table.bufferpool.get_page(last_path)
+        last_pagerange_index, last_page_index = self._parse_page_path(last_path)
         
-        # Check if space exists
-        last_pagerange_index = int(last_path.split('pagerange_')[1].split('/')[0])
-        last_page_index = int(last_path.split('page_')[1].split('.')[0])
-        
-        if last_page.has_capacity(): # If space in last page, write to last page
+        if last_page.has_capacity():
             last_page.write(record)
             insert_path = self.table.last_path
             offset = last_page.num_records - 1
-        else: # Else create new page
+        else:
             new_page = Page()
             new_page.write(record)
             insert_path = last_path
             offset = 0
-            if last_page_index+1 < PAGE_RANGE_SIZE: # If space in page range, write to new page in page range
+            if last_page_index + 1 < PAGE_RANGE_SIZE:
                 insert_path = f"database/{self.table.name}/pagerange_{last_pagerange_index}/base/page_{last_page_index + 1}"
-            else: # If no space in page range, create new page range
+            else:
                 new_pagerange_path = f"database/{self.table.name}/pagerange_{last_pagerange_index + 1}"
-                os.makedirs(f"{new_pagerange_path}/base", exist_ok=True) 
+                os.makedirs(f"{new_pagerange_path}/base", exist_ok=True)
                 os.makedirs(f"{new_pagerange_path}/tail", exist_ok=True)
                 insert_path = f"{new_pagerange_path}/base/page_0"
                 with open(f"{new_pagerange_path}/tail/page_0", 'wb') as f:
-                    f.write(Page().serialize()) # create tail page
-        
+                    f.write(Page().serialize())
             with open(insert_path, 'wb') as f:
-                f.write(Page().serialize()) # create base page
-            
-            
-            # Add new page to bufferpool
+                f.write(Page().serialize())
             self.table.last_path = insert_path
             self.table.bufferpool.add_frame(insert_path, new_page)
-                   
-        # Add new location to page directory 
+        
         self.table.page_directory[f"b{self.current_base_rid}"] = [[insert_path, offset]]
         self.current_base_rid += 1
         return True
@@ -154,7 +142,18 @@ class Query:
                 return False
         return True
     
-    
+    def _parse_page_path(self, path):
+        # Extract pagerange index and page index from a path
+        try:
+            pagerange_part = path.split("pagerange_")[1]
+            pagerange_index = int(pagerange_part.split("/")[0])
+            page_part = path.split("page_")[1]
+            # Remove potential file extension if present.
+            page_index = int(page_part.split("/")[0].split('.')[0])
+            return pagerange_index, page_index
+        except Exception as e:
+            print("Error parsing page path:", e)
+            return 0, 0
 
     
     """
@@ -257,66 +256,67 @@ class Query:
     # FOR TAIL PAGES
     """
     def update(self, primary_key, *columns):
-        # Get the rids of the records with the primary key
         base_rid = self.table.index.locate(0, primary_key)
         if base_rid is False:
             return False
-
         if isinstance(base_rid, bytes):
-            base_rid = base_rid.decode()  # Decode byte string to regular string
+            base_rid = base_rid.decode()
         if not base_rid:
             return False
-        
-        # Get the base record and last tail record
+
+        # Get base and tail records
         base_path, base_offset = self.table.page_directory[base_rid][0]
         base_record = self.table.bufferpool.get_page(base_path).read_index(base_offset)
         last_tail_path, last_tail_offset = self.table.page_directory[base_rid][-1]
         last_tail_record = self.table.bufferpool.get_page(last_tail_path).read_index(last_tail_offset)
 
-        # Create the new record
-        record = Record(base_record.rid, "t" + str(self.current_tail_rid), time.time(), [1 if [*columns][i] is not None else last_tail_record.schema_encoding[i] for i in range(len([*columns]))],[[*columns][i] if [*columns][i] is not None else last_tail_record.columns[i] for i in range(len([*columns]))]  )
+        # Create new record
+        cols = [*columns]
+        schema_len = len(cols)
+        new_schema = [0] * schema_len
+        new_cols = [0] * schema_len
         
-        # Update base record's schema encoding and last tail record's rid to new record's rid 
-        base_record.schema_encoding = record.schema_encoding   
+        for i in range(schema_len):
+            if cols[i] is not None:
+                new_schema[i] = 1
+                new_cols[i] = cols[i]
+            else:
+                new_schema[i] = last_tail_record.schema_encoding[i]
+                new_cols[i] = last_tail_record.columns[i]
+
+        record = Record(base_record.rid, "t" + str(self.current_tail_rid), time.time(), new_schema, new_cols)
+
+        # Update pointers
+        base_record.schema_encoding = record.schema_encoding
         last_tail_record.indirection = record.rid
-        
-        # Get the final tail page location
+
+        # Write new record
         base_pagerange_index = int(base_path.split("pagerange_")[1].split("/")[0])
-        tail_dir = os.path.join(self.table.path, f"pagerange_{base_pagerange_index}", "tail")
-        tail_files = [f for f in os.listdir(tail_dir) if f.startswith("page_")]
-        last_tail_index = max((int(f.split("page_")[1]) for f in tail_files), default=0)
-        last_tail_path = f"database/{self.table.name}/pagerange_{base_pagerange_index}/tail/page_{last_tail_index}"
-        
-        # Ensure space exists and write to final tail page
+        last_tail_path, last_tail_index = self.table.get_tail_page_location(base_pagerange_index)
         last_page = self.table.bufferpool.get_page(last_tail_path)
         
-        # If page is None, create a new one
-        if last_page is None:
-            last_page = Page()
-            with open(last_tail_path, 'wb') as f:
-                f.write(last_page.serialize())
-            self.table.bufferpool.add_frame(last_tail_path, last_page)
-            
-        if last_page.has_capacity(): # If space in last page, write to last page
+        if last_page is None or not last_page.has_capacity():
+            new_path, new_index = self.table.create_new_tail_page(base_pagerange_index)
+            new_page = Page()
+            new_page.write(record)
+            self.table.bufferpool.add_frame(new_path, new_page)
+            insert_path = new_path
+            offset = 0
+        else:
             last_page.write(record)
             insert_path = last_tail_path
             offset = last_page.num_records - 1
-        else: # Else create new page
-            new_page = Page()
-            new_page.write(record)
-            insert_path = last_tail_path
-            offset = 0
-            insert_path = f"database/{self.table.name}/pagerange_{base_pagerange_index}/tail/page_{last_tail_index + 1}"
-            with open(insert_path, 'wb') as f:
-                f.write(Page().serialize())
-            
-            # Add new page to bufferpool
-            self.table.last_path = insert_path
-            self.table.bufferpool.add_frame(insert_path, new_page)
-        
-        # Add new location to page directory 
+
+        # Update directory
         self.table.page_directory[base_record.rid].append([insert_path, offset])
         self.current_tail_rid += 1
+
+        self.table.unmerged_updates += 1
+        # Call merge directly if the number of records exceeds the threshold
+        if self.table.unmerged_updates >= MERGE_THRESH:
+            self.table.merge_count += 1
+            self.table.merge()  # Call the merge method to start the merging thread
+
         return True
 
     
