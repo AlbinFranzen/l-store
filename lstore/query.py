@@ -310,6 +310,13 @@ class Query:
         # Update directory
         self.table.page_directory[base_record.rid].append([insert_path, offset])
         self.current_tail_rid += 1
+
+        self.table.unmerged_updates += 1
+        # Call merge directly if the number of records exceeds the threshold
+        if self.table.unmerged_updates >= MERGE_THRESH:
+            self.table.merge_count += 1
+            self.table.merge()  # Call the merge method to start the merging thread
+
         return True
 
     
