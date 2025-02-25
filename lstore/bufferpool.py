@@ -109,30 +109,22 @@ class BufferPool:
 
     def read_from_disk(self, page_path):
         """
-        Read a page from disk with robust error handling
+        Read a page from disk
+        Args:
+            page_path: path to the page file
+        Returns:
+            Page object or None if error
         """
         try:
             if not os.path.exists(page_path):
-                print(f"Creating new page at {page_path}")
-                # Create a new empty page and save it
-                new_page = Page()
-                os.makedirs(os.path.dirname(page_path), exist_ok=True)
-                with open(page_path, 'wb') as f:
-                    f.write(new_page.serialize())
-                return new_page
+                return None
                 
             with open(page_path, 'rb') as f:
                 data = f.read()
-                
-            try:
-                return Page.deserialize(data)
-            except Exception as e:
-                print(f"Error deserializing {page_path}: {e}, creating new page")
-                return Page()  # Return empty page on deserialization error
-                
+            return Page().deserialize(data)  # Use the stored Page class
         except Exception as e:
             print(f"Error reading from disk: {e}")
-            return Page()  # Always return a valid Page object
+            return None
 
     def get_page(self, page_path):
         """

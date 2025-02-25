@@ -45,6 +45,14 @@ class Table:
         self.record_cache = {}  # {primary_key: record}
         self.max_cache_size = 10000
         
+        # Cache for tail page indices 
+        self.tail_page_indices = {}  # {page_range_index: last_tail_page_index}
+        self.tail_page_paths = {}    # {page_range_index: path_to_last_tail_page}
+        
+        # Add a comprehensive locations cache
+        self.tail_page_locations = {}  # {page_range_index: {page_index: path}}
+        self.latest_tail_indices = {}  # {page_range_index: last_tail_index}
+        
     def cache_record(self, key, record):
         """
         Store frequently accessed records in memory
@@ -87,3 +95,144 @@ class Table:
         
         print("merge is happening")
         pass
+
+    def get_tail_page_path(self, page_range_index):
+        """
+        Get the path to the last tail page in a page range.
+        Creates caching mechanism to avoid expensive directory scans.
+        """
+        if page_range_index in self.tail_page_indices:
+            # Use cached value
+            return self.tail_page_paths[page_range_index]
+        
+        # Cache miss - scan directory once
+        tail_dir = os.path.join(self.path, f"pagerange_{page_range_index}", "tail")
+        try:
+            tail_files = [f for f in os.listdir(tail_dir) if f.startswith("page_")]
+            if (tail_files):
+                last_tail_index = max((int(f.split("page_")[1]) for f in tail_files))
+            else:
+                last_tail_index = 0
+                
+            # Cache the result
+            self.tail_page_indices[page_range_index] = last_tail_index
+            path = f"database/{self.name}/pagerange_{page_range_index}/tail/page_{last_tail_index}"
+            self.tail_page_paths[page_range_index] = path
+            return path
+        except Exception as e:
+            # Handle case where directory doesn't exist yet
+            print(f"Error scanning tail directory: {e}")
+            return f"database/{self.name}/pagerange_{page_range_index}/tail/page_0"
+
+    def update_tail_page_index(self, page_range_index, new_index):
+        """
+        Update the cached tail page index when a new tail page is created
+        """
+        self.tail_page_indices[page_range_index] = new_index
+        self.tail_page_paths[page_range_index] = f"database/{self.name}/pagerange_{page_range_index}/tail/page_{new_index}"
+        
+    def get_tail_page_location(self, page_range_index, create_if_missing=False):
+        """
+        Get the latest tail page location for a page range.
+        Efficiently uses cache to avoid filesystem operations.
+        
+        Args:
+            page_range_index: Index of the page range
+            create_if_missing: Whether to create the directory if missing
+            
+        Returns:
+            tuple: (path, page_index) of the latest tail page
+        """
+        # Check if we have this page range in our cache
+        if page_range_index in self.latest_tail_indices:
+            last_index = self.latest_tail_indices[page_range_index]
+            path = self.tail_page_locations[page_range_index][last_index]
+            return path, last_index
+            
+        # Cache miss - scan the directory
+        tail_dir = os.path.join(self.path, f"pagerange_{page_range_index}", "tail")
+        
+        # Create directory if needed
+        if create_if_missing and not os.path.exists(tail_dir):
+            os.makedirs(tail_dir, exist_ok=True)
+            tail_path = os.path.join(tail_dir, "page_0")
+            with open(tail_path, 'wb') as f:
+                f.write(Page().serialize())
+            
+            # Update cache
+            self.latest_tail_indices[page_range_index] = 0
+            self.tail_page_locations.setdefault(page_range_index, {})[0] = tail_path
+            return tail_path, 0
+            
+        # Scan existing directory
+        try:
+            tail_files = [f for f in os.listdir(tail_dir) if f.startswith("page_")]
+            if tail_files:
+                # Find highest page index
+                last_tail_index = max(int(f.split("page_")[1]) for f in tail_files)
+            else:
+                last_tail_index = 0
+                tail_path = os.path.join(tail_dir, "page_0")
+                with open(tail_path, 'wb') as f:
+                    f.write(Page().serialize())
+                    
+            # Update cache
+            self.latest_tail_indices[page_range_index] = last_tail_index
+            page_paths = {}
+            
+            # Cache all tail page paths for this range
+            for i in range(last_tail_index + 1):
+                path = f"database/{self.name}/pagerange_{page_range_index}/tail/page_{i}"
+                page_paths[i] = path
+                
+            self.tail_page_locations[page_range_index] = page_paths
+            
+            # Return the latest
+            return page_paths[last_tail_index], last_tail_index
+            
+        except Exception as e:
+            print(f"Error accessing tail directory: {e}")
+            if create_if_missing:
+                # Create directory and initial page
+                os.makedirs(tail_dir, exist_ok=True)
+                tail_path = os.path.join(tail_dir, "page_0")
+                with open(tail_path, 'wb') as f:
+                    f.write(Page().serialize())
+                    
+                # Update cache
+                self.latest_tail_indices[page_range_index] = 0
+                self.tail_page_locations.setdefault(page_range_index, {})[0] = tail_path
+                return tail_path, 0
+            return None, None
+    
+    def create_new_tail_page(self, page_range_index):
+        """
+        Create a new tail page in the specified page range.
+        Updates location cache and returns the path to the new page.
+        
+        Returns:
+            tuple: (path, page_index) of the newly created tail page
+        """
+        # Get current tail index
+        if page_range_index in self.latest_tail_indices:
+            last_index = self.latest_tail_indices[page_range_index]
+            new_index = last_index + 1
+        else:
+            # Get it from filesystem
+            _, last_index = self.get_tail_page_location(page_range_index, create_if_missing=True)
+            new_index = last_index + 1
+        
+        # Create new path
+        tail_dir = os.path.join(self.path, f"pagerange_{page_range_index}", "tail")
+        os.makedirs(tail_dir, exist_ok=True)
+        new_path = os.path.join(tail_dir, f"page_{new_index}")
+        
+        # Create empty file on disk
+        with open(new_path, 'wb') as f:
+            f.write(Page().serialize())
+            
+        # Update cache
+        self.latest_tail_indices[page_range_index] = new_index
+        self.tail_page_locations.setdefault(page_range_index, {})[new_index] = new_path
+        
+        return new_path, new_index

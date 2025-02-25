@@ -6,10 +6,14 @@ class Index:
         self.table_name = table.name
         self.num_columns = table.num_columns
         self.indices = [None] * self.num_columns
-        # We decided to use a cache to batch insert keys into the index for better performance
         self.insert_cache = {col: [] for col in range(self.num_columns)}
         self.max_keys = [None] * self.num_columns
-        self.insert_cache_size = 10000
+        self.insert_cache_size = 50000
+        self.unsorted_cache = {col: [] for col in range(self.num_columns)}
+        self.unsorted_threshold = 1000
+        self.primary_key_cache = {}
+        # NEW: Sorted list for primary key (column 0) records
+        self.sorted_records = []  # list of tuples (key, encoded_rid)
         for col in range(self.num_columns):
             self.create_index(col)
 
@@ -30,57 +34,99 @@ class Index:
     Flush the cache to the index
     """
     def flush_cache(self):
-        for col, cache in self.insert_cache.items():
-            if not cache:
-                continue
-            # cache is already sorted.
-            try:
-                self.indices[col].batch_insert(cache)
-                self.max_keys[col] = cache[-1][0]
-            except ValueError:
-                for (k, v) in cache:
-                    self.indices[col][k] = v
-                if self.max_keys[col] is None or cache[-1][0] > self.max_keys[col]:
-                    self.max_keys[col] = cache[-1][0]
-            self.insert_cache[col] = []
+        for col in range(self.num_columns):
+            self._flush_cache_for_column(col)
 
     """
-    Add a record to the index
+    Add a record to the index more efficiently
     """
     def add_record(self, record):
         rid_to_add = record.rid
+        encoded_rid = rid_to_add.encode('utf-8')
+        # For primary key (column 0), update primary key cache and sorted list
+        primary_key = record.columns[0]
+        if primary_key is not None:
+            self.primary_key_cache[primary_key] = encoded_rid
+            # Insert into sorted_records using bisect for O(log n) insertion
+            bisect.insort(self.sorted_records, (primary_key, encoded_rid))
+
         for col, key in enumerate(record.columns):
             if key is None:
                 continue
-            encoded_rid = rid_to_add.encode('utf-8')
-            # Insert maintaining sorted order with bisect
-            cache = self.insert_cache[col]
-            bisect.insort(cache, (key, encoded_rid))
-            if len(cache) >= self.insert_cache_size:
+            # Instead of sorting per insert, simply append to unsorted cache
+            self.unsorted_cache[col].append((key, encoded_rid))
+            # Remove per-insert threshold check: we now defer sorting to flush_cache
+            if len(self.insert_cache[col]) >= self.insert_cache_size:
                 self._flush_cache_for_column(col)
 
     """
-    Flush the cache for a column
+    Efficiently merge two sorted lists
+    """
+    def _merge_sorted_lists(self, list1, list2):
+        result = []
+        i, j = 0, 0
+        len1, len2 = len(list1), len(list2)
+        
+        # Merge in O(n+m) time
+        while i < len1 and j < len2:
+            if list1[i][0] <= list2[j][0]:
+                result.append(list1[i])
+                i += 1
+            else:
+                result.append(list2[j])
+                j += 1
+                
+        # Add remaining elements
+        result.extend(list1[i:])
+        result.extend(list2[j:])
+        return result
+
+    """
+    Flush cache for a column with improved batch handling
     """
     def _flush_cache_for_column(self, col):
-        cache = self.insert_cache[col]
-        if not cache:
+        # In flush, if unsorted_cache exists, sort it once
+        if self.unsorted_cache[col]:
+            sorted_unsorted = sorted(self.unsorted_cache[col], key=lambda x: x[0])
+            # Merge with any existing sorted insert_cache
+            if self.insert_cache[col]:
+                cache = self._merge_sorted_lists(self.insert_cache[col], sorted_unsorted)
+            else:
+                cache = sorted_unsorted
+            self.insert_cache[col] = cache
+            self.unsorted_cache[col] = []
+            
+        if not self.insert_cache[col]:
             return
+            
         try:
-            self.indices[col].batch_insert(cache)
-            self.max_keys[col] = cache[-1][0]
-        except ValueError:
-            for (k, v) in cache:
+            batch_size = 5000
+            for i in range(0, len(self.insert_cache[col]), batch_size):
+                batch = self.insert_cache[col][i:i+batch_size]
+                try:
+                    self.indices[col].batch_insert(batch)
+                except ValueError:
+                    for (k, v) in batch:
+                        self.indices[col][k] = v
+        except Exception as e:
+            print(f"Error in batch insert: {e}, falling back to individual inserts")
+            for (k, v) in self.insert_cache[col]:
                 self.indices[col][k] = v
-            if self.max_keys[col] is None or cache[-1][0] > self.max_keys[col]:
-                self.max_keys[col] = cache[-1][0]
+                
+        if self.insert_cache[col]:
+            if self.max_keys[col] is None or self.insert_cache[col][-1][0] > self.max_keys[col]:
+                self.max_keys[col] = self.insert_cache[col][-1][0]
         self.insert_cache[col] = []
 
     """
     Locate a record in the index
     """
     def locate(self, column, value):
-        self.flush_cache()
+        # For primary key lookups, use cache
+        if column == 0 and value in self.primary_key_cache:
+            return self.primary_key_cache[value].decode('utf-8')
+        # Instead of flushing all columns, flush only the target column
+        self._flush_cache_for_column(column)
         if value is None:
             return False
         try:
@@ -95,7 +141,16 @@ class Index:
     Locate a range of records in the index
     """
     def locate_range(self, begin, end, column):
-        self.flush_cache()
+        # For aggregates on primary key (column 0), use the sorted_records structure
+        if column == 0:
+            result = {}
+            left = bisect.bisect_left(self.sorted_records, (begin, b""))
+            right = bisect.bisect_right(self.sorted_records, (end, b"\xff"))
+            for key, encoded_rid in self.sorted_records[left:right]:
+                result[key] = encoded_rid.decode('utf-8')
+            return result if result else False
+        # For other columns, flush only that column's cache.
+        self._flush_cache_for_column(column)
         result = {}
         rng = self.indices[column][begin: end + 1]
         if not rng:
@@ -114,10 +169,8 @@ class BPlusTree:
         self.root = BPlusTreeNode(is_leaf=True)
 
     def search(self, key):
-        # Iteratively search for the leaf node containing the key using bisect.
         node = self.root
         while not node.is_leaf:
-            # Use bisect_right to find child index
             i = bisect.bisect_right(node.keys, key)
             node = node.children[i]
         return node
