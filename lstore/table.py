@@ -32,11 +32,12 @@ class Table:
     :param key: int             #Index of table key in columns
     """
 
-    def __init__(self, name, num_columns, key):
+    def __init__(self, name, num_columns, key, database=None):
         # Table metadata
         self.name = name
         self.key = key
         self.num_columns = num_columns
+        self.database = database
         self.path = os.path.join("database", name)
         self.page_directory = {}
         self.index = Index(self)
@@ -122,6 +123,11 @@ class Table:
     def merge(self):
         # Start the merge process in a new thread
         with self.merge_lock:
+            if self.merge_lock:
+                #archive before merge process
+                if self.database:
+                    self.database.save_archive(self.name)
+                    
             if self.merge_thread is None or not self.merge_thread.is_alive():
                 self.merge_thread = threading.Thread(target=self._merge)
                 self.total_updates += self.unmerged_updates
