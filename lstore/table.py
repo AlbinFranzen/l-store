@@ -58,5 +58,7 @@ class Table:
         return f"Name: {self.name}\nKey: {self.key}\nNum columns: {self.num_columns}\nPage_ranges: {self.page_ranges}\nPage_directory: {self.page_directory}\nindex: {self.index}"
 
     def __merge(self):
+        # implement
+        
         print("merge is happening")
         pass

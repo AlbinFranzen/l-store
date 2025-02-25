@@ -116,7 +116,7 @@ class Query:
             new_page.write(record)
             insert_path = last_path
             offset = 0
-            if last_page_index < PAGE_RANGE_SIZE: # If space in page range, write to new page in page range
+            if last_page_index+1 < PAGE_RANGE_SIZE: # If space in page range, write to new page in page range
                 insert_path = f"database/{self.table.name}/pagerange_{last_pagerange_index}/base/page_{last_page_index + 1}"
             else: # If no space in page range, create new page range
                 new_pagerange_path = f"database/{self.table.name}/pagerange_{last_pagerange_index + 1}"
@@ -173,14 +173,12 @@ class Query:
         return records 
     
     def _get_merged_lineage(self, base_rid, projected_columns_index):  
-        lineage = self._traverse_lineage(base_rid)
-        base_values = list(lineage[0].columns)
-        for record in lineage:
-            new_values = record.columns
-            for val in range(len(new_values)):
-                if new_values[val] != None:
-                    base_values[val] = new_values[val]
-        new_record = Record(lineage[0].rid, lineage[0].indirection, record.time_stamp, record.schema_encoding, [element for element, bit in zip(base_values, projected_columns_index) if bit == 1])
+        base_path, base_offset = self.table.page_directory[base_rid][0]
+        base_record = self.table.bufferpool.get_page(base_path).read_index(base_offset)
+        last_tail_path, last_tail_offset = self.table.page_directory[base_rid][-1]
+        last_tail_record = self.table.bufferpool.get_page(last_tail_path).read_index(last_tail_offset)
+        
+        new_record = Record(base_record.rid, base_record.indirection, last_tail_record.time_stamp, last_tail_record.schema_encoding, [element for element, bit in zip(last_tail_record.columns, projected_columns_index) if bit == 1])
         return new_record
    
     
@@ -231,6 +229,7 @@ class Query:
             merged_columns = list(lineage[0].columns)
 
             # Merge updates from record_list[1] through record_list[target_index] (inclusive)
+            
             for record in lineage[1:target_index + 1]:
                 for i, value in enumerate(list(record.columns)):
                     if value is not None:
@@ -258,27 +257,19 @@ class Query:
             base_rid = base_rid.decode()  # Decode byte string to regular string
         if not base_rid:
             return False
-
-        lineage = self._traverse_lineage(base_rid)
-        if not lineage:
-            return False  # or handle this appropriately
-
-        # Now access lineage safely
-        record = Record(lineage[0].rid, "t" + str(self.current_tail_rid), time.time(), [1 if [*columns][i] is not None else lineage[-1].schema_encoding[i] for i in range(len([*columns]))],[*columns]  # Columns could be updated if needed
-        )
         
-        # Update base record's schema encoding 
-        base_path, offset = self.table.page_directory[base_rid][0]
-        self.table.bufferpool.add_frame(base_path)
-        base_page = self.table.bufferpool.get_page(base_path)
-        base_page.data[offset].schema_encoding = record.schema_encoding
+        # Get the base record and last tail record
+        base_path, base_offset = self.table.page_directory[base_rid][0]
+        base_record = self.table.bufferpool.get_page(base_path).read_index(base_offset)
+        last_tail_path, last_tail_offset = self.table.page_directory[base_rid][-1]
+        last_tail_record = self.table.bufferpool.get_page(last_tail_path).read_index(last_tail_offset)
+
+        # Create the new record
+        record = Record(base_record.rid, "t" + str(self.current_tail_rid), time.time(), [1 if [*columns][i] is not None else last_tail_record.schema_encoding[i] for i in range(len([*columns]))],[[*columns][i] if [*columns][i] is not None else last_tail_record.columns[i] for i in range(len([*columns]))]  )
         
-        # Update last tail record's rid to new record's rid 
-        last_lin_rid = lineage[-1].rid
-        last_lin_path, offset = self.table.page_directory[base_rid][-1]
-        self.table.bufferpool.add_frame(last_lin_path)
-        last_lin_page = self.table.bufferpool.get_page(last_lin_path)
-        last_lin_page.data[offset].indirection = record.rid
+        # Update base record's schema encoding and last tail record's rid to new record's rid 
+        base_record.schema_encoding = record.schema_encoding   
+        last_tail_record.indirection = record.rid
         
         # Get the final tail page location
         base_pagerange_index = int(base_path.split("pagerange_")[1].split("/")[0])
@@ -307,7 +298,7 @@ class Query:
             self.table.bufferpool.add_frame(insert_path, new_page)
         
         # Add new location to page directory 
-        self.table.page_directory[lineage[0].rid].append([insert_path, offset])
+        self.table.page_directory[base_record.rid].append([insert_path, offset])
         self.current_tail_rid += 1
         return True
 
