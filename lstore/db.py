@@ -1,4 +1,8 @@
 from lstore.table import Table
+import os
+import shutil
+from bufferpool import BufferPool
+
 
 class Database():
 
@@ -8,13 +12,62 @@ class Database():
         """
         self.tables = {}          # A dictionary of tables objects
         self.table_directory = {} # A dictionary of table metadata
-        pass
+        self.db_path = None       # Path to database root folder
+        self.bufferpool = None    # Bufferpool object
+        self.archive_path = None  # Path to archive directory
 
     # Not required for milestone1
     def open(self, path):
+        # Set database path
+        self.db_path = path
+        # Set archive path
+        self.archive_path = os.path.join(path, "archive")
+        # If database path does not exist, create it
+        if not os.path.exists(path):
+            os.makedirs(path, exist_ok=True)
+        # if archive path does not exist, create it
+        if not os.path.exists(self.archive_path):
+            os.makedirs(self.archive_path, exist_ok=True)
+        
+        # Enumerate through all tables in the database
+        for table_name in os.listdir(path):
+            table_dir = os.path.join(path, table_name)
+            if os.path.isdir(table_dir):
+                metadata_path = os.path.join(table_dir, "metadata.txt")
+                if os.path.exists(metadata_path):
+                    with open(metadata_path, 'r') as f:
+                        lines = f.readlines()
+                    # Key index is the first column, num_columns is the second column
+                    if len(lines) >= 2:
+                        key = int(lines[0].strip())
+                        num_columns = int(lines[1].strip())
+                        # Create new table
+                        table = Table(table_name, num_columns, key, database=self)
+                        # Add table to tables dictionary
+                        self.tables[table_name] = table
+                        # Add table to table_directory dictionary
+                        self.table_directory[table_name] = {
+                            "name": table_name,
+                            "num_columns": num_columns,
+                            "key_index": key
+                        }
         pass
 
     def close(self):
+        for table in self.tables.values():
+            # Enumerate through all pages in the table
+            for page_path, frame in table.bufferpool.frames.items():
+                # Write dirty page to disk
+                if frame.dirty_bit:
+                    table.bufferpool.write_to_disk(page_path, frame.page)
+                    # Reset dirty bit
+                    frame.clear_dirty_bit()
+
+            # Write metadata to disk
+            metadata_path = os.path.join(table.path, "metadata.txt")
+            with open(metadata_path, 'w') as f:
+                # Key index is the first column, num_columns is the second column
+                f.write(f"{table.key}\n{table.num_columns}\n")
         pass
 
     """
@@ -73,3 +126,19 @@ class Database():
             # print(f"Table '{name}' does not exist")
             return None
         
+    def save_archive(self, table_name):
+        if not self.archive_path:
+            return
+        
+        table_path = os.path.join(self.db_path, table_name)
+        archive_table_path = os.path.join(self.archive_path, table_name)
+
+        if not os.path.exists(table_path):
+            return
+        
+        if not os.path.exists(archive_table_path):
+            os.makedirs(archive_table_path)
+        
+        archive_file = os.path.join(archive_table_path, f"{table_name}_archive")
+        shutil.copytree(table_path, archive_file, dirs_exist_ok=True)
+        # archives table before merge
