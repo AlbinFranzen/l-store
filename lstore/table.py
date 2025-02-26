@@ -34,14 +34,13 @@ class Table:
     :param key: int             #Index of table key in columns
     """
 
-    def __init__(self, name, num_columns, key, db_path):
+    def __init__(self, name, num_columns, key, database=None):
         # Table metadata
         self.name = name
         self.key = key
         self.num_columns = num_columns
-        self.path = os.path.join(db_path,"_tables", name)
-        self.archival_path = os.path.join(db_path, "_archives", name + "_archived")
-        self.pr_unmerged_updates = [0]  # Unmerged updates per page range
+        self.database = database
+        self.path = os.path.join("database", name)
         self.page_directory = {}
         self.index = Index(self)
         self.bufferpool = BufferPool(self.path)
@@ -331,6 +330,11 @@ class Table:
     def merge(self, pagerange_index):
         # Start the merge process in a new thread
         with self.merge_lock:
+            if self.merge_lock:
+                #archive before merge process
+                if self.database:
+                    self.database.save_archive(self.name)
+                    
             if self.merge_thread is None or not self.merge_thread.is_alive():
                 self.merge_thread = threading.Thread(target=self._merge, args=(pagerange_index,))
                 self.unmerged_updates = 0
