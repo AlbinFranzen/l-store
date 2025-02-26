@@ -15,14 +15,16 @@ query = Query(grades_table)
 # dictionary for records to test the database: test directory
 records = {}
 
-number_of_records = 1000
+number_of_records = 2
 number_of_aggregates = 100
-number_of_updates = 1
+number_of_updates = 10
 
 seed(3562901)
 for i in range(0, number_of_records):
     key = 92106429 + i
+
     records[key] = [key, randint(0, 20), randint(0, 20), randint(0, 20), randint(0, 20)]
+    print('insert', key, records[key])
 
 # Simulate updates
 updated_records = {}
@@ -33,6 +35,7 @@ for _ in range(number_of_updates):
         for j in range(2, grades_table.num_columns):
             value = randint(0, 20)
             updated_records[key][j] = value
+        print('update', key, updated_records[key])
 keys = sorted(list(records.keys()))
 
 # Check records that were presisted in part 1

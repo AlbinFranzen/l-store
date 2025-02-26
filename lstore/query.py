@@ -3,7 +3,7 @@ from lstore.table import Table, Record
 from lstore.index import Index
 from lstore.page import Page
 #from lstore.page_range import PageRange
-from lstore.config import *
+from lstore.config import MERGE_THRESH, PAGE_RANGE_SIZE
 import time
 import copy
 import os
@@ -54,6 +54,7 @@ class Query:
         
         # create a new tail record
         record = Record(
+                        base_record.rid,
                         last_tail_record.rid,
                         "t" + str(self.current_tail_rid),
                         time.time(),
@@ -90,7 +91,13 @@ class Query:
 
         # update page directory
         self.table.page_directory[base_record.rid].append([insert_path, offset])
+        self.table.index.add_record(record)
+        
         self.current_tail_rid += 1
+        self.table.pr_unmerged_updates[base_pagerange_index] += 1
+        # Call merge directly if the number of records exceeds the threshold
+        if self.table.pr_unmerged_updates[base_pagerange_index] >= MERGE_THRESH:
+            self.table.merge(base_pagerange_index)  # Call the merge method to start the merging thread
         return True
     
     """
@@ -100,9 +107,17 @@ class Query:
     # FOR BASE PAGES
     """
     def insert(self, *columns):
+        # duplicate_rid = self.table.index.locate([*columns][0], 0)
+        # if duplicate_rid is not False:
+        #     path, offset = self.table.page_directory[duplicate_rid][0]
+        #     page = self.table.bufferpool.get_page(path)
+        #     old_duplicate_record = page.read_index(offset)
+        #     old_duplicate_record.columns = [*columns]
+        #     return True
+
         if not self._verify_insert_input(*columns):
             return False
-        record = Record(None, f"b{self.current_base_rid}", time.time(), [0] * len(columns), [*columns])
+        record = Record(f"b{self.current_base_rid}",None, f"b{self.current_base_rid}", time.time(), [0] * len(columns), [*columns])
         self.table.index.add_record(record)
         
         last_path = self.table.last_path
@@ -119,9 +134,10 @@ class Query:
             insert_path = last_path
             offset = 0
             if last_page_index + 1 < PAGE_RANGE_SIZE:
-                insert_path = f"database/{self.table.name}/pagerange_{last_pagerange_index}/base/page_{last_page_index + 1}"
+                insert_path = f"{self.table.path}/pagerange_{last_pagerange_index}/base/page_{last_page_index + 1}"
+                self.table.pr_unmerged_updates.append(0)
             else:
-                new_pagerange_path = f"database/{self.table.name}/pagerange_{last_pagerange_index + 1}"
+                new_pagerange_path = f"{self.table.path}/pagerange_{last_pagerange_index + 1}"
                 os.makedirs(f"{new_pagerange_path}/base", exist_ok=True)
                 os.makedirs(f"{new_pagerange_path}/tail", exist_ok=True)
                 insert_path = f"{new_pagerange_path}/base/page_0"
@@ -175,21 +191,61 @@ class Query:
         # Merge the lineage
         records = []
         for rid in rid_list:
-            new_record = self._get_merged_lineage(rid, projected_columns_index)
-            records.append(new_record)
+            try:
+                new_record = self._get_merged_lineage(rid, projected_columns_index)
+                if new_record:
+                    records.append(new_record)
+            except Exception as e:
+                print(f"Error retrieving record for RID {rid}: {e}")
         
-        return records 
+        return records if records else False
     
     def _get_merged_lineage(self, base_rid, projected_columns_index):  
-        base_path, base_offset = self.table.page_directory[base_rid][0]
-        base_record = self.table.bufferpool.get_page(base_path).read_index(base_offset)
-        last_tail_path, last_tail_offset = self.table.page_directory[base_rid][-1]
-        last_tail_record = self.table.bufferpool.get_page(last_tail_path).read_index(last_tail_offset)
-        
-        new_record = Record(base_record.rid, base_record.indirection, last_tail_record.time_stamp, last_tail_record.schema_encoding, [element for element, bit in zip(last_tail_record.columns, projected_columns_index) if bit == 1])
-        return new_record
+        try:
+            if base_rid not in self.table.page_directory:
+                print(f"RID {base_rid} not found in page directory")
+                return None
+                
+            # Get base record
+            base_path, base_offset = self.table.page_directory[base_rid][0]
+            base_page = self.table.bufferpool.get_page(base_path)
+            if base_page is None:
+                print(f"Base page not found at {base_path}")
+                return None
+                
+            if base_offset >= base_page.num_records:
+                print(f"Base record offset {base_offset} out of range (page has {base_page.num_records} records)")
+                return None
+                
+            base_record = base_page.read_index(base_offset)
+            
+            # Get latest tail record
+            last_tail_path, last_tail_offset = self.table.page_directory[base_rid][-1]
+            tail_page = self.table.bufferpool.get_page(last_tail_path)
+            if tail_page is None:
+                print(f"Tail page not found at {last_tail_path}")
+                return None
+                
+            if last_tail_offset >= tail_page.num_records:
+                print(f"Tail record offset {last_tail_offset} out of range (page has {tail_page.num_records} records)")
+                return None
+                
+            last_tail_record = tail_page.read_index(last_tail_offset)
+            
+            # Build the projected record
+            new_record = Record(
+                base_record.rid,
+                base_record.rid, 
+                base_record.indirection,
+                last_tail_record.time_stamp,
+                last_tail_record.schema_encoding,
+                [element for element, bit in zip(last_tail_record.columns, projected_columns_index) if bit == 1]
+            )
+            return new_record
+        except Exception as e:
+            print(f"Error in _get_merged_lineage for {base_rid}: {e}")
+            return None
    
-    
     # Get list of records from base_rid
     def _traverse_lineage(self, base_rid):
         lineage = []
@@ -198,13 +254,19 @@ class Query:
 
         if base_rid not in self.table.page_directory:
             return []
-
+        
         # Traverse through base and tail records
         for path, offset in self.table.page_directory[base_rid]:
-            page = self.table.bufferpool.get_page(path)
-            record = page.read_index(offset)
-            lineage.append(record)
-
+            try:
+                page = self.table.bufferpool.get_page(path)
+                if page and offset < page.num_records:
+                    record = page.read_index(offset)
+                    lineage.append(record)
+                else:
+                    print(f"Warning: Could not retrieve record at {path}:{offset}")
+            except Exception as e:
+                print(f"Error traversing lineage at {path}:{offset}: {e}")
+                
         return lineage
     
     """
@@ -221,31 +283,34 @@ class Query:
     def select_version(self, search_key, search_key_index, projected_columns_index, relative_version):
         rids_combined = self.table.index.locate(search_key_index, search_key)
         if not rids_combined:
-            return False
+            print("No records found")
+            return None
         rid_list = rids_combined.split(",")
         
         # Here, each element in record_lineages is already a lineage (a list of records)
         results = []
         for rid in rid_list:
             lineage = self._traverse_lineage(rid)
-            if relative_version - 1 < 0:
-                target_index = min(len(lineage) + relative_version - 1, len(lineage)-1)
-            else:
-                target_index = relative_version - 1
+            print(f"Lineage length: {len(lineage)} and Relative version:, {relative_version} ")
+            for i in range(len(lineage)):
+                print(f"Rid: {rid} columns: {lineage[i].columns}")
+            #print(f"\nSearch key: {search_key}, Lineage: {lineage}, Relative version: {relative_version}")
 
-            # Start with the base record's columns (assumed to be in record_list[0])
-            merged_columns = list(lineage[0].columns)
+            if relative_version == -1:
+                target_index = 1
+            elif relative_version == -2:
+                if len(lineage) == 1:
+                    target_index = 1
+                else:
+                    target_index = 2
+            elif relative_version == 0: 
+                target_index = len(lineage) - 1
 
-            # Merge updates from record_list[1] through record_list[target_index] (inclusive)
+                
+            temp_record = copy.deepcopy(lineage[target_index]) 
+            temp_record.columns = [element for element, bit in zip(temp_record.columns, projected_columns_index) if bit == 1]
+            results.append(temp_record)
             
-            for record in lineage[1:target_index + 1]:
-                for i, value in enumerate(list(record.columns)):
-                    if value is not None:
-                        merged_columns[i] = value
-            
-            
-            record = Record(lineage[0].rid, lineage[0].indirection, lineage[-1].time_stamp, lineage[-1].schema_encoding, [element for element, bit in zip(merged_columns, projected_columns_index) if bit == 1])
-            results.append(record)
         return results
 
 
@@ -284,18 +349,23 @@ class Query:
                 new_schema[i] = last_tail_record.schema_encoding[i]
                 new_cols[i] = last_tail_record.columns[i]
 
-        record = Record(base_record.rid, "t" + str(self.current_tail_rid), time.time(), new_schema, new_cols)
+        record = Record(base_record.rid,base_record.rid, "t" + str(self.current_tail_rid), time.time(), new_schema, new_cols)
+        # delete old record in index
+        # add new record to index
 
         # Update pointers
         base_record.schema_encoding = record.schema_encoding
         last_tail_record.indirection = record.rid
 
         # Write new record
+        #print("Base path: ", base_path)
         base_pagerange_index = int(base_path.split("pagerange_")[1].split("/")[0])
         last_tail_path, last_tail_index = self.table.get_tail_page_location(base_pagerange_index)
+        #print("Tail path: ", last_tail_path)
         last_page = self.table.bufferpool.get_page(last_tail_path)
         
         if last_page is None or not last_page.has_capacity():
+            #print("creating tail page:", base_pagerange_index)
             new_path, new_index = self.table.create_new_tail_page(base_pagerange_index)
             new_page = Page()
             new_page.write(record)
@@ -311,11 +381,10 @@ class Query:
         self.table.page_directory[base_record.rid].append([insert_path, offset])
         self.current_tail_rid += 1
 
-        self.table.unmerged_updates += 1
+        self.table.pr_unmerged_updates[base_pagerange_index] += 1
         # Call merge directly if the number of records exceeds the threshold
-        if self.table.unmerged_updates >= MERGE_THRESH:
-            self.table.merge_count += 1
-            self.table.merge()  # Call the merge method to start the merging thread
+        if self.table.pr_unmerged_updates[base_pagerange_index] >= MERGE_THRESH:
+            self.table.merge(base_pagerange_index)  # Call the merge method to start the merging thread
 
         return True
 
@@ -353,7 +422,7 @@ class Query:
     # Returns False if no record exists in the given range
     """
     def sum_version(self, start_range, end_range, aggregate_column_index, relative_version):
-        range_sum = 0    
+        range_sum = 0     
         rids = self.table.index.locate_range(start_range, end_range, 0)
         if rids == False:
             return False
@@ -361,26 +430,34 @@ class Query:
         #traverse tree for each rid found in range
         for rid in rids:
             lineage = self._traverse_lineage(rid)
-            if relative_version - 1 < 0:
-                target_index = min(len(lineage) + relative_version - 1, len(lineage)-1)
-            else:
-                target_index = relative_version - 1
+            target_index = 0
+                
+            #print(f"Lineage length: {len(lineage)} and Relative version:, {relative_version} ")
             
-            # Start with the base record's columns (assumed to be in record_list[0])
-            merged_columns = list(lineage[0].columns)
-
-            # Merge updates from record_list[1] through record_list[target_index] (inclusive)
-            for record in lineage[1:target_index + 1]:
-                for i, value in enumerate(list(record.columns)):
-                    if value is not None:
-                        merged_columns[i] = value
-                        
             record = lineage[target_index]
-            if merged_columns[aggregate_column_index] is None:
-                continue
-            range_sum += merged_columns[aggregate_column_index]
-        
+            results += record.columns[aggregate_column_index]
+            {}
         return range_sum
+            # lineage = self._traverse_lineage(rid)
+            # if relative_version - 1 < 0:
+            #     target_index = min(len(lineage) + relative_version - 1, len(lineage)-1)
+            # else:
+            #     target_index = relative_version - 1
+            
+            # # Start with the base record's columns (assumed to be in record_list[0])
+            # merged_columns = list(lineage[0].columns)
+
+            # # Merge updates from record_list[1] through record_list[target_index] (inclusive)
+            # for record in lineage[1:target_index + 1]:
+            #     for i, value in enumerate(list(record.columns)):
+            #         if value is not None:
+            #             merged_columns[i] = value
+                        
+            # record = lineage[target_index]
+            # if merged_columns[aggregate_column_index] is None:
+            #     continue
+            # range_sum += merged_columns[aggregate_column_index]
+        
       
 
     

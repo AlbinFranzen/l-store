@@ -37,13 +37,14 @@ class Page:
             bytes: Serialized page data
         """
         page_data = {
-            'num_records': self.num_records,  # Using the full name for compatibility
+            'num_records': self.num_records,
             'records': []
         }
         
         # Serialize each record
         for record in self.data:
             record_data = {
+                'base_rid': record.base_rid,
                 'indirection': record.indirection,
                 'rid': record.rid,
                 'time_stamp': record.time_stamp,
@@ -51,7 +52,6 @@ class Page:
                 'columns': record.columns
             }
             page_data['records'].append(record_data)
-            
         return msgpack.packb(page_data)
 
     @classmethod 
@@ -69,25 +69,21 @@ class Page:
         # Create new page
         page = cls()
         
-        try:
-            # Unpack the serialized data
-            page_data = msgpack.unpackb(data)
-            
-            # Set page metadata
-            page.num_records = page_data['num_records']
-            
-            # Reconstruct records
-            for record_data in page_data['records']:
-                record = Record(
-                    record_data['indirection'],
-                    record_data['rid'], 
-                    record_data['time_stamp'],
-                    record_data['schema_encoding'],
-                    record_data['columns']
-                )
-                page.data.append(record)
-        except Exception as e:
-            print(f"Deserialization error: {e}. Returning empty page.")
-            # Return empty page on error
-            
+        # Unpack the serialized data
+        page_data = msgpack.unpackb(data)
+        
+        # Set page metadata
+        page.num_records = page_data['num_records']
+        
+        # Reconstruct records
+        for record_data in page_data['records']:
+            record = Record(
+                record_data['base_rid'],
+                record_data['indirection'],
+                record_data['rid'], 
+                record_data['time_stamp'],
+                record_data['schema_encoding'],
+                record_data['columns']
+            )
+            page.data.append(record)
         return page

@@ -30,6 +30,27 @@ class Index:
             os.remove(index_file)
         self.indices[column_number] = BPlusTree(index_file, order=75, cache_size=10000)
 
+
+    def refresh_indexes(self, table):
+        """
+        Refresh all indexes based on the current state of the table.
+        """
+        # Clear existing indexes
+        self.indices = [None] * self.num_columns
+        self.primary_key_cache = {}
+        self.sorted_records = []
+
+        # Recreate indexes
+        for col in range(self.num_columns):
+            self.create_index(col)
+
+        # Re-index all records in the table
+        for _, locations in table.page_directory.items():
+            base_path, base_offset = locations[0]
+            print("base path: " + base_path)
+            base_record = table.bufferpool.get_page(base_path).read_index(base_offset)
+            self.add_record(base_record)
+
     """
     Flush the cache to the index
     """
@@ -167,6 +188,7 @@ class BPlusTree:
         self.order = order
         self.max_keys = order - 1
         self.root = BPlusTreeNode(is_leaf=True)
+        self.serializable_path = index_file
 
     def search(self, key):
         node = self.root
@@ -263,6 +285,20 @@ class BPlusTree:
             count += len(node.keys)
             node = node.next
         return count
+
+    # Add a method to get all key-value pairs
+    def items(self):
+        """Get all key-value pairs in the tree"""
+        result = []
+        node = self.root
+        while not node.is_leaf:
+            node = node.children[0]
+            
+        while node:
+            for k, v in zip(node.keys, node.children):
+                result.append((k, v))
+            node = node.next
+        return result
 
 
 class BPlusTreeNode:

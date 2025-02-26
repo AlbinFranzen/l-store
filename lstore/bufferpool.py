@@ -87,6 +87,21 @@ class BufferPool:
         self.frames[page_path] = new_frame
         return new_frame
 
+
+    def abs_remove_frame(self, page_path):
+        """
+        Remove a frame from the buffer pool without writing to disk
+        Args:
+            page_path: path to the page file
+        Returns:
+            True if successful, False if error
+        """
+        if page_path in self.frames:            
+            del self.frames[page_path]
+            return True
+        return False
+
+
     def write_to_disk(self, page_path, page):
         """
         Write a page to disk
@@ -146,14 +161,7 @@ class BufferPool:
         if frame:
             frame.increment_pin_count()
             return frame.page
-            
         return None
-        
-        # Add to buffer pool
-        if not self.add_frame(page_path):
-            return None
-        
-        return page_data
     
     def update_page(self, page_path, make_dirty=False):
         """

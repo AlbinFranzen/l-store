@@ -1,29 +1,42 @@
 from lstore.table import Table
 from lstore.query import Query
 from lstore.db import Database
+import os
 
 db = Database()
+db.open('./ECS165')
 test_table = db.create_table("test_table", 3, 0)
-# db.get_table("test_table")
-# test_table = Table("test_table", 3, 0)
 query = Query(test_table)
+
 query.insert(50, 2, 3)
 query.insert(51, 4, 6)
-# query.insert(20, 3, 4)
-query.update(50, 6, None, None)
-query.update(51, None, None, 10)
-# query.delete(51)
-query.update(51, None, 5, None) 
-# query.update(20, 10, 5, None)
-# query.update(20, 15, 5, None)
 
-#print(query.sum_version(0, 30, 1, -1))
-print(query.table.page_directory)
-print(query._get_merged_lineage("b1", [1,1,1]))
-print("")
-#print(query.select(50, 0, [1, 1, 1]))
-#print(query.sum_version(5, 60, 0))
-#print(query.select_version(50, 0, [1, 1, 1], -1)[0])
+query.update(50, None, 6, None)
+query.update(51, None, None, 10)
+query.update(51, None, 5, None)
+
+db.close()
+test_table.merge_thread.join()
+
+print("Opening table")
+db.open('./ECS165')
+
+new_test_table = db.get_table('test_table')
+query = Query(new_test_table)
+
+# b0_path, offset = new_test_table.page_directory["b0"][0]
+# print(f"b0 path: {b0_path}")
+# b0_record = new_test_table.bufferpool.get_page(b0_path).read_index(offset)
+# print(f"b0 record: {b0_record}")
+# print("Search: ", new_test_table.index.locate(6,0))
+print(f"\nPage directory: {new_test_table.page_directory}")
+query.select_version(50, 0, [1, 1, 1], -1)
+query.select_version(51, 0, [1, 1, 1], -1)
+print(f"\nquery select: {query.select(51, 0, [1, 1, 1])} ")
+# base_records = test_table.bufferpool.get_page(os.path.join(test_table.path, "pagerange_0/base/page_0")).read_all()
+# tail_records = test_table.bufferpool.get_page(os.path.join(test_table.path, "pagerange_0/tail/page_0")).read_all()
+# print(f"base recs: {base_records}\ntail records: {tail_records}")
+
 
 
 

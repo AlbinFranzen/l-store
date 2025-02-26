@@ -19,18 +19,19 @@ query = Query(grades_table)
 # dictionary for records to test the database: test directory
 records = {}
 
-number_of_records = 1000
+number_of_records = 2
 number_of_aggregates = 100
 number_of_updates = 10
 
 seed(3562901)
-
 for i in range(0, number_of_records):
     key = 92106429 + i
     records[key] = [key, randint(0, 20), randint(0, 20), randint(0, 20), randint(0, 20)]
+    print('insert', key, records[key])
     query.insert(*records[key])
 keys = sorted(list(records.keys()))
 print("Insert finished")
+
 
 # Check inserted records using select query
 for key in keys:
