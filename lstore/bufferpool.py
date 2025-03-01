@@ -1,7 +1,6 @@
 from lstore.config import POOL_SIZE
 from collections import OrderedDict
 import os
-from lstore.frame import Frame
 from lstore.page import Page
 
 
