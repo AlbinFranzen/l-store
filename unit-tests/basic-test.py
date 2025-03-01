@@ -1,7 +1,5 @@
-from lstore.table import Table
 from lstore.query import Query
 from lstore.db import Database
-import os
 
 db = Database()
 db.open('./ECS165')
