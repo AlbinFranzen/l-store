@@ -4,7 +4,7 @@ import threading
 from lstore.table import Table
 from lstore.bufferpool import BufferPool
 
-class Database():
+class Database:
 
     def __init__(self):
         """
@@ -14,6 +14,7 @@ class Database():
         self.table_directory = {} # A dictionary of table metadata
         self.db_path = None
         pass
+
 
     def open(self, path):
         """
@@ -49,6 +50,7 @@ class Database():
         self._scan_directory_for_tables(path)
         if os.path.exists(tables_path):
             self._scan_directory_for_tables(tables_path)
+
 
     def _scan_directory_for_tables(self, directory_path):
         """Scan a directory for table folders and load them"""
@@ -126,7 +128,8 @@ class Database():
                         table = Table(table_name, info["num_columns"], info["key_index"], self.db_path)
                         self.tables[table_name] = table
                         print(f"Created new table {table_name} as fallback")
-    
+
+
     def _rebuild_index_from_pages(self, table):
         """Rebuild index from page files if needed"""
         # Only rebuild if index seems empty
@@ -179,6 +182,7 @@ class Database():
             # Make sure to flush the cache to B+ trees
             table.index.flush_cache()
             print(f"Index rebuild complete with {len(table.index.sorted_records)} entries")
+
 
     def close(self):
         """
@@ -333,6 +337,7 @@ class Database():
                 table.bufferpool = BufferPool(table.path)
         print("Database closed successfully")
 
+
     """
     # Creates a new table
     :param name: string         #Table name
@@ -373,7 +378,6 @@ class Database():
         else:
             pass
             # print(f"Table '{name}' does not exist")
-        
 
     
     """
@@ -399,4 +403,3 @@ class Database():
         # Table doesn't exist
         print(f"Table '{name}' does not exist")
         return None
-

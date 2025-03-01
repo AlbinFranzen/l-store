@@ -17,6 +17,7 @@ class Index:
         for col in range(self.num_columns):
             self.create_index(col)
 
+
     """
     Create the index
     """
@@ -51,12 +52,14 @@ class Index:
             base_record = table.bufferpool.get_page(base_path).read_index(base_offset)
             self.add_record(base_record)
 
+
     """
     Flush the cache to the index
     """
     def flush_cache(self):
         for col in range(self.num_columns):
             self._flush_cache_for_column(col)
+
 
     """
     Add a record to the index more efficiently
@@ -80,6 +83,7 @@ class Index:
             if len(self.insert_cache[col]) >= self.insert_cache_size:
                 self._flush_cache_for_column(col)
 
+
     """
     Efficiently merge two sorted lists
     """
@@ -101,6 +105,7 @@ class Index:
         result.extend(list1[i:])
         result.extend(list2[j:])
         return result
+
 
     """
     Flush cache for a column with improved batch handling
@@ -139,6 +144,7 @@ class Index:
                 self.max_keys[col] = self.insert_cache[col][-1][0]
         self.insert_cache[col] = []
 
+
     """
     Locate a record in the index
     """
@@ -157,6 +163,7 @@ class Index:
         except KeyError:
             return False
         return False
+
 
     """
     Locate a range of records in the index
@@ -179,6 +186,7 @@ class Index:
         for key in rng:
             result[key] = self.indices[column][key].decode('utf-8')
         return result if result else False
+
 
 """
 B+ Tree implementation from scratch

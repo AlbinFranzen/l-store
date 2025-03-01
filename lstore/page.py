@@ -1,5 +1,5 @@
-from lstore.config import PAGE_RECORD_SIZE
 import msgpack
+from lstore.config import PAGE_RECORD_SIZE
 
 class Page:
     def __init__(self):

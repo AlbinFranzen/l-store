@@ -1,14 +1,12 @@
-from uuid import uuid4
-from lstore.table import Table, Record
-from lstore.index import Index
-from lstore.page import Page
-#from lstore.page_range import PageRange
-from lstore.config import MERGE_THRESH, PAGE_RANGE_SIZE
+import os
 import time
 import copy
-import os
+from lstore.table import Table, Record
+from lstore.page import Page
+from lstore.config import MERGE_THRESH, PAGE_RANGE_SIZE
 
 class Query:
+
     """
     # Creates a Query object that can perform different queries on the specified table 
     Queries that fail must return False
@@ -19,10 +17,12 @@ class Query:
         self.table = table
         self.current_base_rid = 0
         self.current_tail_rid = 0
-        
+
+
     def __repr__(self):
         return f"Table:\n{self.table}\ncurrent_base_rid: {self.current_base_rid}\ncurrent_tail_rid: {self.current_tail_rid}"
-    
+
+
     def update_base_rid(self):
         self.current_base_rid += 1
         pass
@@ -99,7 +99,8 @@ class Query:
         if self.table.pr_unmerged_updates[base_pagerange_index] >= MERGE_THRESH:
             self.table.merge(base_pagerange_index)  # Call the merge method to start the merging thread
         return True
-    
+
+
     """
     # Insert a record with specified columns
     # Return True upon succesful insertion
@@ -157,7 +158,8 @@ class Query:
             if not isinstance(column, int):
                 return False
         return True
-    
+
+
     def _parse_page_path(self, path):
         # Extract pagerange index and page index from a path
         try:
@@ -199,7 +201,8 @@ class Query:
                 print(f"Error retrieving record for RID {rid}: {e}")
         
         return records if records else False
-    
+
+
     def _get_merged_lineage(self, base_rid, projected_columns_index):  
         try:
             if base_rid not in self.table.page_directory:
@@ -245,7 +248,8 @@ class Query:
         except Exception as e:
             print(f"Error in _get_merged_lineage for {base_rid}: {e}")
             return None
-   
+
+
     # Get list of records from base_rid
     def _traverse_lineage(self, base_rid):
         lineage = []
@@ -268,7 +272,8 @@ class Query:
                 print(f"Error traversing lineage at {path}:{offset}: {e}")
                 
         return lineage
-    
+
+
     """
     # Read matching record with specified search key
     # :param search_key: the value you want to search based on
@@ -458,9 +463,7 @@ class Query:
             #     continue
             # range_sum += merged_columns[aggregate_column_index]
         
-      
 
-    
     """
     incremenets one column of the record
     this implementation should work if your select and update queries already work

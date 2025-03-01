@@ -1,10 +1,8 @@
 import os
 import threading
 import time
-
 from lstore.index import Index
-from  lstore.config import PAGE_SIZE, PAGE_RANGE_SIZE
-# from lstore.page_range import PageRange
+from  lstore.config import PAGE_SIZE
 from lstore.bufferpool import BufferPool
 from lstore.page import Page
 
@@ -12,7 +10,6 @@ INDIRECTION_COLUMN = 0
 RID_COLUMN = 1
 TIMESTAMP_COLUMN = 2
 SCHEMA_ENCODING_COLUMN = 3
-
 
 class Record:
 
@@ -28,12 +25,12 @@ class Record:
         return f"indirection: {self.indirection}  |  rid: {self.rid}  |  time_stamp: {self.time_stamp}  |  schema_encoding: {self.schema_encoding}  |  columns: {self.columns}\n"
 
 class Table:
+
     """
     :param name: string         #Table name
     :param num_columns: int     #Number of Columns: all columns are integer
     :param key: int             #Index of table key in columns
     """
-
     def __init__(self, name, num_columns, key, db_path):
         # Table metadata
         self.name = name
@@ -66,6 +63,7 @@ class Table:
         self.tail_page_locations = {}  # {page_range_index: {page_index: path}}
         self.latest_tail_indices = {}  # {page_range_index: last_tail_index}
 
+
     def cache_record(self, key, record):
         """
         Store frequently accessed records in memory
@@ -75,11 +73,13 @@ class Table:
             self.record_cache.pop(next(iter(self.record_cache)))
         self.record_cache[key] = record
 
+
     def get_cached_record(self, key):
         """
         Get record from cache if available
         """
         return self.record_cache.get(key)
+
 
     def invalidate_cache(self, key):
         """
@@ -87,6 +87,7 @@ class Table:
         """
         if key in self.record_cache:
             del self.record_cache[key]
+
 
     def _init_page_range_storage(self):
         """Creates initial page range directory and storage"""
@@ -101,9 +102,11 @@ class Table:
             with open(os.path.join(path, "page_0"), 'wb') as f:
                 f.write(Page().serialize())
 
+
     def __repr__(self):
         return f"Name: {self.name}\nKey: {self.key}\nNum columns: {self.num_columns}\nPage_directory: {self.page_directory}\nindex: {self.index}"
-        
+
+
     def copy_directory(self, src, dst):
         """
         Recursively copies a directory without using shutil.
@@ -145,6 +148,7 @@ class Table:
                         if not chunk:
                             break
                         f_dst.write(chunk)
+
 
     def archive_table(self):
         """
@@ -328,6 +332,7 @@ class Table:
             print(f"Merging completed in {merge_duration:.8f} seconds.")
             self.pr_unmerged_updates[page_range_index] = 0
 
+
     def merge(self, pagerange_index):
         # Start the merge process in a new thread
         with self.merge_lock:
@@ -337,6 +342,7 @@ class Table:
                 self.merge_thread.start()
             else:
                 return False
+
 
     def get_tail_page_path(self, page_range_index):
         """
@@ -366,12 +372,14 @@ class Table:
             print(f"Error scanning tail directory: {e}")
             return f"database/{self.name}/pagerange_{page_range_index}/tail/page_0"
 
+
     def update_tail_page_index(self, page_range_index, new_index):
         """
         Update the cached tail page index when a new tail page is created
         """
         self.tail_page_indices[page_range_index] = new_index
         self.tail_page_paths[page_range_index] = f"database/{self.name}/pagerange_{page_range_index}/tail/page_{new_index}"
+
 
     def get_tail_page_location(self, pagerange_index):
         """Get the location of the current tail page for a page range"""
@@ -396,6 +404,7 @@ class Table:
             
         last_page_num = int(tail_pages[-1].split('_')[1])
         return os.path.join(tail_dir, f"page_{last_page_num}"), last_page_num
+
 
     def create_new_tail_page(self, page_range_index):
         """

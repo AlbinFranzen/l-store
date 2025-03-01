@@ -1,8 +1,7 @@
+import os
 from lstore.config import POOL_SIZE
 from collections import OrderedDict
-import os
 from lstore.page import Page
-
 
 class BufferPool:
     def __init__(self, table_path):
@@ -14,7 +13,7 @@ class BufferPool:
         self.pool_size = POOL_SIZE
         # Use OrderedDict to implement LRU - most recently used items are at the end
         self.frames = OrderedDict()  # {page_path: Frame}
-        
+
     def _update_lru(self, page_path):
         """
         Move accessed page to end of LRU order
@@ -22,7 +21,7 @@ class BufferPool:
         if page_path in self.frames:
             frame = self.frames.pop(page_path)
             self.frames[page_path] = frame
-        
+
     def evict_page(self):
         """
         Evict least recently used unpinned page, prioritizing non-dirty pages
@@ -56,7 +55,7 @@ class BufferPool:
         except Exception as e:
             print(f"Error during page eviction: {e}")
             return False
-        
+
     def add_frame(self, page_path, page_data=None):
         
         """
@@ -121,6 +120,7 @@ class BufferPool:
             print(f"Error writing to disk: {e}")
             return False
 
+
     def read_from_disk(self, page_path):
         """
         Read a page from disk
@@ -139,6 +139,7 @@ class BufferPool:
         except Exception as e:
             print(f"Error reading from disk: {e}")
             return None
+
 
     def get_page(self, page_path):
         """
@@ -161,7 +162,8 @@ class BufferPool:
             frame.increment_pin_count()
             return frame.page
         return None
-    
+
+
     def update_page(self, page_path, make_dirty=False):
         """
         Update a page in the buffer pool or disk
@@ -177,20 +179,24 @@ class BufferPool:
             frame.set_dirty_bit()
 
         return True
-    
+
+
     def unpin_page(self, page_path):
         """
         Decrement pin count for a page
         """
         if page_path in self.frames:
             self.frames[page_path].decrement_page_count()
-            
+
+
     def mark_dirty(self, page_path):
         """
         Mark a page as dirty
         """
         if page_path in self.frames:
             self.frames[page_path].set_dirty_bit()
+
+
 
 class Frame:
     def __init__(self, page=None, page_path=None):
