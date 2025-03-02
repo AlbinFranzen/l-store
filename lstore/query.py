@@ -118,7 +118,7 @@ class Query:
 
         if not self._verify_insert_input(*columns):
             return False
-        record = Record(f"b{self.current_base_rid}",None, f"b{self.current_base_rid}", time.time(), [0] * len(columns), [*columns])
+        record = Record(f"b{self.current_base_rid}", f"b{self.current_base_rid}", f"b{self.current_base_rid}", time.time(), [0] * len(columns), [*columns])
         self.table.index.add_record(record)
         
         last_path = self.table.last_path
@@ -335,10 +335,41 @@ class Query:
         # Get base and tail records
         base_path, base_offset = self.table.page_directory[base_rid]
         base_record = self.table.bufferpool.get_page(base_path).read_index(base_offset)
-        last_tail_path, last_tail_offset = self.table.page_directory[base_record.indirection]
-        last_tail_record = self.table.bufferpool.get_page(last_tail_path).read_index(last_tail_offset)
-
-        # Create new record
+        
+        # Determine if this is the first update by checking if indirection points to itself
+        is_first_update = base_record.indirection == base_record.rid
+        print(f"Is first update: {is_first_update}")
+        
+        # Get last tail record 
+        if not is_first_update:
+            last_tail_path, last_tail_offset = self.table.page_directory[base_record.indirection]
+            last_tail_record = self.table.bufferpool.get_page(last_tail_path).read_index(last_tail_offset)
+        else: # If first record tail record add an extra modified base record to the tail
+            original_copy = Record(base_record.rid, base_record.rid, "t" + str(self.current_tail_rid), time.time(), [1 if col is not None else 0 for col in [*columns]], base_record.columns)
+            self.current_tail_rid += 1
+            
+            # Write the modified to tail page
+            base_pagerange_index = int(base_path.split("pagerange_")[1].split("/")[0])
+            last_tail_path, last_tail_index = self.table.get_tail_page_location(base_pagerange_index)
+            last_page = self.table.bufferpool.get_page(last_tail_path)
+            
+            if last_page is None or not last_page.has_capacity():
+                new_path, new_index = self.table.create_new_tail_page(base_pagerange_index)
+                new_page = Page()
+                new_page.write(original_copy)
+                self.table.bufferpool.add_frame(new_path, new_page)
+                insert_path = new_path
+                offset = 0
+            else:
+                last_page.write(original_copy)
+                insert_path = last_tail_path
+                offset = last_page.num_records - 1
+            
+            # Update directory for original copy
+            self.table.page_directory[original_copy.rid] = [insert_path, offset]
+            last_tail_record = original_copy
+        
+        # Create new schema and columns
         cols = [*columns]
         schema_len = len(cols)
         new_schema = [0] * schema_len
@@ -358,7 +389,7 @@ class Query:
 
         # Update pointers
         base_record.schema_encoding = record.schema_encoding
-        last_tail_record.indirection = record.rid
+        base_record.indirection = record.rid
 
         # Write new record
         #print("Base path: ", base_path)
@@ -381,13 +412,14 @@ class Query:
             offset = last_page.num_records - 1
 
         # Update directory
-        self.table.page_directory[record] = [insert_path, offset]
+        self.table.page_directory[record.rid] = [insert_path, offset]
         self.current_tail_rid += 1
 
         self.table.pr_unmerged_updates[base_pagerange_index] += 1
         # Call merge directly if the number of records exceeds the threshold
         if self.table.pr_unmerged_updates[base_pagerange_index] >= MERGE_THRESH:
-            self.table.merge(base_pagerange_index)  # Call the merge method to start the merging thread
+            #self.table.merge(base_pagerange_index)  # Call the merge method to start the merging thread
+            pass
 
         return True
 

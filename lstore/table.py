@@ -164,9 +164,6 @@ class Table:
                     
                     # update the base record
                     base_record.columns = tail_record.columns
-                    base_record.schema_encoding = tail_record.schema_encoding
-                    base_record.indirection = tail_record.rid
-                    base_record.start_time = tail_record.start_time
                     base_record.last_updated_time = time.time()
                     
                     # Step 4. Write the updated base record to the current page or create a new page
