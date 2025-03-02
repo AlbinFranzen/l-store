@@ -142,6 +142,7 @@ class Query:
                 os.makedirs(f"{new_pagerange_path}/base", exist_ok=True)
                 os.makedirs(f"{new_pagerange_path}/tail", exist_ok=True)
                 insert_path = f"{new_pagerange_path}/base/page_0"
+                self.table.page_range_tps[last_pagerange_index + 1] = 0
                 with open(f"{new_pagerange_path}/tail/page_0", 'wb') as f:
                     f.write(Page().serialize())
             with open(insert_path, 'wb') as f:
@@ -193,13 +194,10 @@ class Query:
         # Merge the lineage
         records = []
         for rid in rid_list:
-            try:
-                new_record = self._get_merged_lineage(rid, projected_columns_index)
-                if new_record:
-                    records.append(new_record)
-            except Exception as e:
-                print(f"Error retrieving record for RID {rid}: {e}")
-        
+            new_record = self._get_merged_lineage(rid, projected_columns_index)
+            if new_record:
+                records.append(new_record)
+            
         return records if records else False
 
 
