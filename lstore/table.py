@@ -1,8 +1,10 @@
 import os
 import threading
 import time
+
 from lstore.index import Index
-from  lstore.config import PAGE_SIZE
+from  lstore.config import PAGE_SIZE, PAGE_RANGE_SIZE
+# from lstore.page_range import PageRange
 from lstore.bufferpool import BufferPool
 from lstore.page import Page
 
@@ -11,26 +13,27 @@ RID_COLUMN = 1
 TIMESTAMP_COLUMN = 2
 SCHEMA_ENCODING_COLUMN = 3
 
+
 class Record:
 
-    def __init__(self, base_rid, indirection, rid, time_stamp, schema_encoding, columns):
-        self.base_rid = base_rid
+    def __init__(self, base_rid, indirection, rid, start_time, schema_encoding, columns, last_updated_time=None):
         self.indirection = indirection
         self.rid = rid
-        self.time_stamp = time_stamp
+        self.start_time = start_time
         self.schema_encoding = schema_encoding
         self.columns = columns
+        self.base_rid = base_rid
 
     def __repr__(self):
-        return f"indirection: {self.indirection}  |  rid: {self.rid}  |  time_stamp: {self.time_stamp}  |  schema_encoding: {self.schema_encoding}  |  columns: {self.columns}\n"
+        return f"indirection: {self.indirection}  |  rid: {self.rid}  |  start_time: {self.start_time}  |  schema_encoding: {self.schema_encoding}  |  columns: {self.columns}\n"
 
 class Table:
-
     """
     :param name: string         #Table name
     :param num_columns: int     #Number of Columns: all columns are integer
     :param key: int             #Index of table key in columns
     """
+
     def __init__(self, name, num_columns, key, db_path):
         # Table metadata
         self.name = name
@@ -63,7 +66,6 @@ class Table:
         self.tail_page_locations = {}  # {page_range_index: {page_index: path}}
         self.latest_tail_indices = {}  # {page_range_index: last_tail_index}
 
-
     def cache_record(self, key, record):
         """
         Store frequently accessed records in memory
@@ -73,13 +75,11 @@ class Table:
             self.record_cache.pop(next(iter(self.record_cache)))
         self.record_cache[key] = record
 
-
     def get_cached_record(self, key):
         """
         Get record from cache if available
         """
         return self.record_cache.get(key)
-
 
     def invalidate_cache(self, key):
         """
@@ -87,7 +87,6 @@ class Table:
         """
         if key in self.record_cache:
             del self.record_cache[key]
-
 
     def _init_page_range_storage(self):
         """Creates initial page range directory and storage"""
@@ -102,11 +101,134 @@ class Table:
             with open(os.path.join(path, "page_0"), 'wb') as f:
                 f.write(Page().serialize())
 
-
     def __repr__(self):
         return f"Name: {self.name}\nKey: {self.key}\nNum columns: {self.num_columns}\nPage_directory: {self.page_directory}\nindex: {self.index}"
+    
+    def merge(self, pagerange_index):
+        # Start the merge process in a new thread
+        with self.merge_lock:
+            if self.merge_thread is None or not self.merge_thread.is_alive():
+                self.merge_thread = threading.Thread(target=self._merge, args=(pagerange_index,))
+                self.unmerged_updates = 0
+                self.merge_thread.start()
+            else:
+                return False
 
+    def _merge(self, page_range_index):
+        with self.merge_lock:
+            start_time = time.time()
+            print(f"Merge started with merge count: {self.merge_count}")
+            
+            # Archive the current table state before merging.
+            self.archive_table()
+        
+            # Get the base and tail records
+            base_dir = os.path.join(self.path, f"pagerange_{page_range_index}", "base")
+            tail_dir = os.path.join(self.path, f"pagerange_{page_range_index}", "tail")
+            
+            all_base_records = {}  # Map of base_rid -> base_record
+            all_tail_records = []  # List of all tail records
+            
+            # Read all base pages and store records in memory
+            base_pages = []
+            base_file_paths = []
+            for base_file in sorted(os.listdir(base_dir)):
+                if base_file.startswith("page_"):
+                    base_path = os.path.join(base_dir, base_file)
+                    base_file_paths.append(base_path)
+                    base_page = self.bufferpool.get_page(base_path)
+                    if base_page:
+                        base_pages.append(base_page)
+                        # Store all records in memory
+                        for base_record in base_page.read_all():
+                            all_base_records[base_record.base_rid] = base_record
+                            
+            # Read all tail pages and store records in memory
+            tail_pages = []
+            tail_file_paths = []
+            for tail_file in sorted(os.listdir(tail_dir)):
+                if tail_file.startswith("page_"):
+                    tail_path = os.path.join(tail_dir, tail_file)
+                    tail_file_paths.append(tail_path)
+                    tail_page = self.bufferpool.get_page(tail_path)
+                    if tail_page:
+                        tail_pages.append(tail_page)
+                        # Collect all tail records
+                        all_tail_records.extend(tail_page.read_all())
+                        
+            # Update the page directory to temporarily point to archive for contention free merging
+            for rid in all_base_records.keys():
+                
+                self.page_directory[rid] = f"archive/{self.name}/pagerange_{page_range_index}/base/page_0"
+            
+            # Now that we have all records in memory, we can remove the frames and files
+            for base_path in base_file_paths:
+                self.bufferpool.abs_remove_frame(base_path)
+                os.remove(base_path)
+                
+            for tail_path in tail_file_paths:
+                self.bufferpool.abs_remove_frame(tail_path)
+                os.remove(tail_path)
 
+            # Do the actual merging
+            updated_records = {rid: False for rid in all_base_records.keys()}
+            num_merged = 0
+            max_merged = len(all_base_records)
+            
+            current_page = Page()
+            pages_to_add = [current_page]
+            for tail_record in reversed(all_tail_records):
+                if not updated_records[tail_record.base_rid]: # If base record has not been updated
+                    base_record = all_base_records[tail_record.base_rid]
+                    updated_records[tail_record.base_rid] = True
+                    
+                    # update the base record
+                    base_record.columns = tail_record.columns
+                    base_record.schema_encoding = tail_record.schema_encoding
+                    base_record.indirection = tail_record.rid
+                    base_record.start_time = tail_record.start_time
+                    base_record.last_updated_time = time.time()
+                    
+                    # Write the updated base record to the current page or create a new page
+                    if not current_page.has_capacity():
+                        current_page = Page()
+                        pages_to_add.append(current_page)
+                    current_page.write(base_record)
+                        
+                    # Add the new base record to the page directory
+                    self.page_directory[tail_record.base_rid] =  # TODO
+
+                    # do the merge until max_merged is reached or all tail records are merged
+                    num_merged += 1
+                    if num_merged == max_merged:
+                        break
+                    
+            # When the       
+            
+            # Update index
+            self.index = Index(self)
+            for rid, base_record in all_base_records.items():
+                self.index.add_record(base_record)
+                
+            self.index.flush_cache()
+            
+            #self.page_directory = old_page_directory
+            merge_duration = time.time() - start_time
+            #print("old page dir", self.page_directory)
+            #print(f"Merging completed in {merge_duration:.8f} seconds.")
+            self.pr_unmerged_updates[page_range_index] = 0
+            
+    def archive_table(self):
+        """
+        Archives the entire table by copying its directory into an archive path 
+        under the current merge count.
+        EX: DB/table_name_archive/
+        """
+        #might have to make per page range instead of the entire table 
+        merge_dir = os.path.join(self.archival_path, f"merge_{self.merge_count}")  # Archive destination
+        os.makedirs(merge_dir, exist_ok=True)  # Ensure archive directory exists
+        self.copy_directory(self.path, merge_dir)  # Copy table directory to archive
+            
     def copy_directory(self, src, dst):
         """
         Recursively copies a directory without using shutil.
@@ -149,201 +271,6 @@ class Table:
                             break
                         f_dst.write(chunk)
 
-
-    def archive_table(self):
-        """
-        Archives the entire table by copying its directory into an archive path 
-        under the current merge count.
-        EX: DB/table_name_archive/
-        """
-        #might have to make per page range instead of the entire table 
-        merge_dir = os.path.join(self.archival_path, f"merge_{self.merge_count}")  # Archive destination
-        os.makedirs(merge_dir, exist_ok=True)  # Ensure archive directory exists
-        self.copy_directory(self.path, merge_dir)  # Copy table directory to archive
-
-
-    def _merge(self, page_range_index):
-        with self.merge_lock:
-            # First, flush buffer pool for any pages we'll archive
-            base_dir = os.path.join(self.path, f"pagerange_{page_range_index}", "base")
-            tail_dir = os.path.join(self.path, f"pagerange_{page_range_index}", "tail")
-            
-            # Flush base pages to disk before archiving
-            for base_file in sorted(os.listdir(base_dir)):
-                if base_file.startswith("page_"):
-                    base_path = os.path.join(base_dir, base_file)
-                    base_page = self.bufferpool.get_page(base_path)
-                    if base_page:
-                        # Flush page to disk before archiving
-                        with open(base_path, 'wb') as f:
-                            f.write(base_page.serialize())
-            
-            # Flush tail pages to disk before archiving
-            for tail_file in sorted(os.listdir(tail_dir)):
-                if tail_file.startswith("page_"):
-                    tail_path = os.path.join(tail_dir, tail_file)
-                    tail_page = self.bufferpool.get_page(tail_path)
-                    if tail_page:
-                        # Flush page to disk before archiving
-                        with open(tail_path, 'wb') as f:
-                            f.write(tail_page.serialize())
-                            
-            # Archive the current table state before merging.
-            self.archive_table()
-
-            start_time = time.time()
-            print("Merging records...\n")
-            print(f"Merge count: {self.merge_count}")
-
-            # Read all base and tail records into memory BEFORE removing any files or frames
-            all_base_records = {}  # Map of base_rid -> base_record
-            all_tail_records = []  # List of all tail records
-            
-            # Read all base pages and store records in memory
-            base_pages = []
-            base_file_paths = []
-            for base_file in sorted(os.listdir(base_dir)):
-                if base_file.startswith("page_"):
-                    base_path = os.path.join(base_dir, base_file)
-                    base_file_paths.append(base_path)
-                    base_page = self.bufferpool.get_page(base_path)
-                    if base_page:
-                        base_pages.append(base_page)
-                        # Store all records in memory
-                        for base_record in base_page.read_all():
-                            all_base_records[base_record.base_rid] = base_record
-            
-            # Read all tail pages and store records in memory
-            tail_pages = []
-            tail_file_paths = []
-            for tail_file in sorted(os.listdir(tail_dir)):
-                if tail_file.startswith("page_"):
-                    tail_path = os.path.join(tail_dir, tail_file)
-                    tail_file_paths.append(tail_path)
-                    tail_page = self.bufferpool.get_page(tail_path)
-                    if tail_page:
-                        tail_pages.append(tail_page)
-                        # Collect all tail records
-                        all_tail_records.extend(tail_page.read_all())
-            
-            # Now that we have all records in memory, we can remove the frames and files
-            for base_path in base_file_paths:
-                self.bufferpool.abs_remove_frame(base_path)
-                os.remove(base_path)
-                
-            for tail_path in tail_file_paths:
-                self.bufferpool.abs_remove_frame(tail_path)
-                os.remove(tail_path)
-            
-            # Merge records from base and tail pages
-            # Base records are already in all_base_records dictionary
-            
-            #####################    IMPORTANT MERGING   #####################################
-            # combine tail records into new base records
-            old_page_directory = self.page_directory.copy()
-            self.page_directory = {}
-
-            updated_records = set()
-            for tail_record in all_tail_records:
-                if tail_record.base_rid in all_base_records:
-                    base_record = all_base_records[tail_record.base_rid]
-                    # Apply updates from tail records to base columns
-                    updated_records.add(tail_record.base_rid)
-                    # update schema and lineage too
-                    base_record.columns = tail_record.columns
-                    base_record.schema_encoding = [0]*len(tail_record.columns)
-                    base_record.indirection = tail_record.base_rid
-                    base_record.time_stamp = tail_record.time_stamp
-            
-            ###########################################################
-            
-            # Write merged records back to base pages
-            print(f"Number of Merged Records: {len(all_base_records)}\n")
-            
-            page_index = 0
-            current_page = Page()
-            # We need to store the mapping of record rid to new location
-            record_locations = {}  # rid -> [path, offset]
-            for base_rid, base_record in all_base_records.items():
-                # If current page is full, write it to disk and create new page
-                if not current_page.has_capacity():
-                    base_path = os.path.join(base_dir, f"page_{page_index}")
-                    with open(base_path, 'wb') as f:
-                        f.write(current_page.serialize())
-
-                    page_index += 1
-                    current_page = Page()
-            
-                # Write record to current page
-                offset = current_page.write(base_record)
-                base_path = os.path.join(base_dir, f"page_{page_index}")
-                record_locations[base_record.base_rid] = [base_path, offset]
-                self.page_directory[base_record.base_rid] = [[base_path, offset]]
-        
-            # Write the last page if it contains any records
-            if current_page.num_records > 0:
-                base_path = os.path.join(base_dir, f"page_{page_index}")
-                with open(base_path, 'wb') as f:
-                    f.write(current_page.serialize())
-            
-            # Create initial tail page_0
-            tail_page_0_path = os.path.join(tail_dir, "page_0")
-            with open(tail_page_0_path, 'wb') as f:
-                f.write(Page().serialize())
-            
-            # Create a new page directory that includes archived paths
-            new_page_directory = {}
-            for base_rid, locations in old_page_directory.items():
-                # Get current base location
-                if base_rid in self.page_directory:
-                    current_base_location = self.page_directory[base_rid][0]
-                    new_locations = []  # Start with current base location
-                    
-                    # Add archived base location
-                    original_base_path, base_offset = locations[0]
-                    relative_base_path = os.path.relpath(original_base_path, self.path)
-                    archive_base_path = os.path.join(self.archival_path, f"merge_{self.merge_count}", relative_base_path)
-                    new_locations.append([archive_base_path, base_offset])
-                    
-                    # Add archived tail locations
-                    for tail_location in locations[1:]:
-                        original_tail_path, tail_offset = tail_location
-                        relative_tail_path = os.path.relpath(original_tail_path, self.path)
-                        archive_tail_path = os.path.join(self.archival_path, f"merge_{self.merge_count}", relative_tail_path)
-                        new_locations.append([archive_tail_path, tail_offset])
-                        
-                        # Ensure archive directory exists
-                        os.makedirs(os.path.dirname(archive_tail_path), exist_ok=True)
-                    
-                    new_locations.append(current_base_location)
-                    new_page_directory[base_rid] = new_locations
-            
-            # Replace page directory with new one containing archive paths
-            self.page_directory = new_page_directory
-            
-            # Update index
-            self.index = Index(self)
-            for rid, base_record in all_base_records.items():
-                self.index.add_record(base_record)
-                
-            self.index.flush_cache()
-            
-            merge_duration = time.time() - start_time
-            print(f"Merging completed in {merge_duration:.8f} seconds.")
-            self.pr_unmerged_updates[page_range_index] = 0
-
-
-    def merge(self, pagerange_index):
-        # Start the merge process in a new thread
-        with self.merge_lock:
-            if self.merge_thread is None or not self.merge_thread.is_alive():
-                self.merge_thread = threading.Thread(target=self._merge, args=(pagerange_index,))
-                self.unmerged_updates = 0
-                self.merge_thread.start()
-            else:
-                return False
-
-
     def get_tail_page_path(self, page_range_index):
         """
         Get the path to the last tail page in a page range.
@@ -372,14 +299,12 @@ class Table:
             print(f"Error scanning tail directory: {e}")
             return f"database/{self.name}/pagerange_{page_range_index}/tail/page_0"
 
-
     def update_tail_page_index(self, page_range_index, new_index):
         """
         Update the cached tail page index when a new tail page is created
         """
         self.tail_page_indices[page_range_index] = new_index
         self.tail_page_paths[page_range_index] = f"database/{self.name}/pagerange_{page_range_index}/tail/page_{new_index}"
-
 
     def get_tail_page_location(self, pagerange_index):
         """Get the location of the current tail page for a page range"""
@@ -404,7 +329,6 @@ class Table:
             
         last_page_num = int(tail_pages[-1].split('_')[1])
         return os.path.join(tail_dir, f"page_{last_page_num}"), last_page_num
-
 
     def create_new_tail_page(self, page_range_index):
         """

@@ -43,7 +43,7 @@ class TestPageSerialization(unittest.TestCase):
         
         self.assertEqual(deserialized_record.indirection, original_record.indirection)
         self.assertEqual(deserialized_record.rid, original_record.rid)
-        self.assertEqual(deserialized_record.time_stamp, original_record.time_stamp)
+        self.assertEqual(deserialized_record.start_time, original_record.start_time)
         self.assertEqual(deserialized_record.schema_encoding, original_record.schema_encoding)
         self.assertEqual(deserialized_record.columns, original_record.columns)
 
@@ -65,7 +65,7 @@ class TestPageSerialization(unittest.TestCase):
             deserialized_record = deserialized_page.data[i]
             self.assertEqual(deserialized_record.indirection, original_record.indirection)
             self.assertEqual(deserialized_record.rid, original_record.rid)
-            self.assertEqual(deserialized_record.time_stamp, original_record.time_stamp)
+            self.assertEqual(deserialized_record.start_time, original_record.start_time)
             self.assertEqual(deserialized_record.schema_encoding, original_record.schema_encoding)
             self.assertEqual(deserialized_record.columns, original_record.columns)
 
@@ -82,7 +82,7 @@ class TestPageSerialization(unittest.TestCase):
         # Verify None values are preserved
         deserialized_record = deserialized_page.data[0]
         self.assertIsNone(deserialized_record.indirection)
-        self.assertIsNone(deserialized_record.time_stamp)
+        self.assertIsNone(deserialized_record.start_time)
         self.assertEqual(deserialized_record.schema_encoding, [None, None])
         self.assertEqual(deserialized_record.columns, [None, None, None])
 

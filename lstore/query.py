@@ -46,9 +46,9 @@ class Query:
             return False
 
         # Get base and last tail records
-        base_path, base_offset = self.table.page_directory[base_rid][0]
+        base_path, base_offset = self.table.page_directory[base_rid]
         base_record = self.table.bufferpool.get_page(base_path).read_index(base_offset)
-        last_tail_path, last_tail_offset = self.table.page_directory[base_rid][-1]
+        last_tail_path, last_tail_offset = self.table.page_directory[base_record.indirection]
         last_tail_record = self.table.bufferpool.get_page(last_tail_path).read_index(last_tail_offset)
         
         
@@ -90,7 +90,7 @@ class Query:
             offset = last_page.num_records - 1
 
         # update page directory
-        self.table.page_directory[base_record.rid].append([insert_path, offset])
+        self.table.page_directory[record.rid] = [insert_path, offset]
         self.table.index.add_record(record)
         
         self.current_tail_rid += 1
@@ -149,7 +149,7 @@ class Query:
             self.table.last_path = insert_path
             self.table.bufferpool.add_frame(insert_path, new_page)
         
-        self.table.page_directory[f"b{self.current_base_rid}"] = [[insert_path, offset]]
+        self.table.page_directory[f"b{self.current_base_rid}"] = [insert_path, offset]
         self.current_base_rid += 1
         return True
     
@@ -210,7 +210,7 @@ class Query:
                 return None
                 
             # Get base record
-            base_path, base_offset = self.table.page_directory[base_rid][0]
+            base_path, base_offset = self.table.page_directory[base_rid]
             base_page = self.table.bufferpool.get_page(base_path)
             if base_page is None:
                 print(f"Base page not found at {base_path}")
@@ -223,7 +223,7 @@ class Query:
             base_record = base_page.read_index(base_offset)
             
             # Get latest tail record
-            last_tail_path, last_tail_offset = self.table.page_directory[base_rid][-1]
+            last_tail_path, last_tail_offset = self.table.page_directory[base_record.indirection]
             tail_page = self.table.bufferpool.get_page(last_tail_path)
             if tail_page is None:
                 print(f"Tail page not found at {last_tail_path}")
@@ -238,9 +238,9 @@ class Query:
             # Build the projected record
             new_record = Record(
                 base_record.rid,
-                base_record.rid, 
+                last_tail_record.rid, 
                 base_record.indirection,
-                last_tail_record.time_stamp,
+                last_tail_record.start_time,
                 last_tail_record.schema_encoding,
                 [element for element, bit in zip(last_tail_record.columns, projected_columns_index) if bit == 1]
             )
@@ -259,17 +259,17 @@ class Query:
         if base_rid not in self.table.page_directory:
             return []
         
-        # Traverse through base and tail records
-        for path, offset in self.table.page_directory[base_rid]:
-            try:
-                page = self.table.bufferpool.get_page(path)
-                if page and offset < page.num_records:
-                    record = page.read_index(offset)
-                    lineage.append(record)
-                else:
-                    print(f"Warning: Could not retrieve record at {path}:{offset}")
-            except Exception as e:
-                print(f"Error traversing lineage at {path}:{offset}: {e}")
+        # # Traverse through base and tail records
+        # for path, offset in self.table.page_directory[base_rid]:
+        #     try:
+        #         page = self.table.bufferpool.get_page(path)
+        #         if page and offset < page.num_records:
+        #             record = page.read_index(offset)
+        #             lineage.append(record)
+        #         else:
+        #             print(f"Warning: Could not retrieve record at {path}:{offset}")
+        #     except Exception as e:
+        #         print(f"Error traversing lineage at {path}:{offset}: {e}")
                 
         return lineage
 
@@ -335,9 +335,9 @@ class Query:
             return False
 
         # Get base and tail records
-        base_path, base_offset = self.table.page_directory[base_rid][0]
+        base_path, base_offset = self.table.page_directory[base_rid]
         base_record = self.table.bufferpool.get_page(base_path).read_index(base_offset)
-        last_tail_path, last_tail_offset = self.table.page_directory[base_rid][-1]
+        last_tail_path, last_tail_offset = self.table.page_directory[base_record.indirection]
         last_tail_record = self.table.bufferpool.get_page(last_tail_path).read_index(last_tail_offset)
 
         # Create new record
@@ -354,7 +354,7 @@ class Query:
                 new_schema[i] = last_tail_record.schema_encoding[i]
                 new_cols[i] = last_tail_record.columns[i]
 
-        record = Record(base_record.rid,base_record.rid, "t" + str(self.current_tail_rid), time.time(), new_schema, new_cols)
+        record = Record(base_record.rid, last_tail_record.rid, "t" + str(self.current_tail_rid), time.time(), new_schema, new_cols)
         # delete old record in index
         # add new record to index
 
@@ -383,7 +383,7 @@ class Query:
             offset = last_page.num_records - 1
 
         # Update directory
-        self.table.page_directory[base_record.rid].append([insert_path, offset])
+        self.table.page_directory[record] = [insert_path, offset]
         self.current_tail_rid += 1
 
         self.table.pr_unmerged_updates[base_pagerange_index] += 1

@@ -194,19 +194,17 @@ class Database:
         
         # Run final merges on all tables and all page ranges
         for table_name, table in self.tables.items():
-            print(f"Running final merges for table {table_name} before closing...")
             
             # Use pr_unmerged_updates to determine page ranges if available
             if hasattr(table, 'pr_unmerged_updates') and isinstance(table.pr_unmerged_updates, list):
                 page_range_count = len(table.pr_unmerged_updates)
-                print(f"Found {page_range_count} page ranges to merge for table {table_name} from metadata")
+                #print(f"Found {page_range_count} page ranges to merge for table {table_name} from metadata")
                 
                 # Merge each page range individually
                 for pr_index in range(page_range_count):
                     try:
                         # Only merge page ranges with unmerged updates
-                        if table.pr_unmerged_updates[pr_index] > 0:
-                            print(f"Merging page range {pr_index} with {table.pr_unmerged_updates[pr_index]} unmerged updates...")
+                        if table.pr_unmerged_updates[pr_index] > 0:                          
     
                             table.merge(pr_index)
                             # Reset unmerged updates after merging
@@ -222,20 +220,20 @@ class Database:
                                       if d.startswith('pagerange_') and os.path.isdir(os.path.join(table.path, d))]
                         
                     if page_ranges:
-                        print(f"Found {len(page_ranges)} page ranges by scanning directory for table {table_name}")
+                        
                         for pr_index in sorted(page_ranges):
                             print(f"Merging page range {pr_index} for table {table_name}...")
                             table.merge(pr_index)
                   
                         # If no page ranges found but _merge exists, try a general merge
-                        print(f"Running general merge for table {table_name}")
+                        
                         table.merge()
                 except Exception as e:
                     print(f"Error during fallback merge for table {table_name}: {e}")
             
             # Wait for any ongoing background merge threads
             if hasattr(table, 'merge_thread') and table.merge_thread and table.merge_thread.is_alive():
-                print(f"Waiting for active merge thread to complete on table {table_name}...")
+                
                 try:
                     table.merge_thread.join(timeout=120)  # Wait up to 2 minutes
                     if table.merge_thread.is_alive():
@@ -286,8 +284,7 @@ class Database:
                         
                 # Save the index data
                 with open(index_path, 'wb') as f:
-                    pickle.dump(index_data, f)
-                print(f"Saved index for table {table_name}")
+                    pickle.dump(index_data, f)              
             except Exception as e:
                 print(f"Error saving index for {table_name}: {e}")
             
@@ -335,7 +332,6 @@ class Database:
                     
                 # Restore buffer pool
                 table.bufferpool = BufferPool(table.path)
-        print("Database closed successfully")
 
 
     """

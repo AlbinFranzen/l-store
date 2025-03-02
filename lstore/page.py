@@ -47,7 +47,7 @@ class Page:
                 'base_rid': record.base_rid,
                 'indirection': record.indirection,
                 'rid': record.rid,
-                'time_stamp': record.time_stamp,
+                'start_time': record.start_time,
                 'schema_encoding': record.schema_encoding,
                 'columns': record.columns
             }
@@ -81,7 +81,7 @@ class Page:
                 record_data['base_rid'],
                 record_data['indirection'],
                 record_data['rid'], 
-                record_data['time_stamp'],
+                record_data['start_time'],
                 record_data['schema_encoding'],
                 record_data['columns']
             )
