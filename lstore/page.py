@@ -20,7 +20,7 @@ class Page:
         self.num_records += 1
         return self.num_records-1
     
-    def overwrite(self, index, record):  # Overwrite record at index
+    def overwrite_index(self, index, record):  # Overwrite record at index
         self.data[index] = record
         pass
 

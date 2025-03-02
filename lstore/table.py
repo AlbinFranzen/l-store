@@ -137,7 +137,7 @@ class Table:
                 self.bufferpool.frames[base_path].page_path = os.path.join(base_path, "_original") # Rename page
                 for base_record in base_page.read_all():
                     all_base_records[base_record.base_rid] = base_record   
-                    tail_page_references[base_record.base_rid] = self.page_directory[base_record.indirection]
+                    tail_page_references[base_record.base_rid] = self.page_directory[base_record.indirection][0]
             
             # Convert tail_page_references to a sorted list by last index value
             tail_page_paths = list(tail_page_references.values())
@@ -167,9 +167,9 @@ class Table:
                     base_record.last_updated_time = time.time()
                     
                     # Step 4. Write the updated base record to the current page or create a new page
-                    offset, path = base_pages[self.page_directory]
+                    path, offset = self.page_directory[base_record.rid]
                     path_index = int(path.split('page_')[-1])
-                    base_pages[path_index].overwrite_index(base_record, offset)
+                    base_pages[path_index].overwrite_index(offset, base_record)
                     
                     # do the merge until max_merged is reached or all tail records are merged
                     num_merged += 1

@@ -18,8 +18,15 @@ query.update(51, None, 5, None)
 
 for path, offset in query.table.page_directory.values():
     print(f"record: {query.table.bufferpool.get_page(path).read_index(offset)}")
+    
+test_table.merge(0)
 
-print("\n selected", query.select_version(51, 0, [1, 1, 1], -2))
+test_table.merge_thread.join()
+print("\nAfter merge:")
+for path, offset in query.table.page_directory.values():
+    print(f"record: {query.table.bufferpool.get_page(path).read_index(offset)}")
+
+#print("\n selected", query.select_version(51, 0, [1, 1, 1], -2))
 
 #db.close()
 # test_table.merge_thread.join()
