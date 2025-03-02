@@ -289,29 +289,17 @@ class Query:
             print("No records found")
             return None
         rid_list = rids_combined.split(",")
-        
         # Here, each element in record_lineages is already a lineage (a list of records)
         results = []
         for rid in rid_list:
-            lineage = self._traverse_lineage(rid)
-            print(f"Lineage length: {len(lineage)} and Relative version:, {relative_version} ")
-            for i in range(len(lineage)):
-                print(f"Rid: {rid} columns: {lineage[i].columns}")
-            #print(f"\nSearch key: {search_key}, Lineage: {lineage}, Relative version: {relative_version}")
-
-            if relative_version == -1:
-                target_index = 1
-            elif relative_version == -2:
-                if len(lineage) == 1:
-                    target_index = 1
-                else:
-                    target_index = 2
-            elif relative_version == 0: 
-                target_index = len(lineage) - 1
-
+            temp_rid = rid
+            for i in range(abs(relative_version-1)):
+                temp_record_path, offset = self.table.page_directory[temp_rid]
+                temp_record = self.table.bufferpool.get_page(temp_record_path).read_index(offset)
+                temp_rid = temp_record.indirection
                 
-            temp_record = copy.deepcopy(lineage[target_index]) 
-            temp_record.columns = [element for element, bit in zip(temp_record.columns, projected_columns_index) if bit == 1]
+            modified_record = copy.deepcopy(temp_record) 
+            modified_record.columns = [element for element, bit in zip(temp_record.columns, projected_columns_index) if bit == 1]
             results.append(temp_record)
             
         return results
