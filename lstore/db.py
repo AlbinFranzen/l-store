@@ -26,7 +26,6 @@ class Database:
         # Wait for any ongoing merge operations to complete
         for name, table in self.tables.items():
             if table.merge_thread and table.merge_thread.is_alive():
-                print(f"Waiting for merge to complete on table '{name}'...")
                 try:
                     table.merge_thread.join(timeout=30)  # Wait up to 30 seconds
                     if table.merge_thread.is_alive():

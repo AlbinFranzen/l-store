@@ -21,7 +21,6 @@ test_table.merge(0)
 db.close()
 test_table.merge_thread.join()
 
-print("Opening table")
 db.open('./ECS165')
 
 new_test_table = db.get_table('test_table')
