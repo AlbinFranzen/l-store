@@ -15,7 +15,7 @@ class Query:
     """
     def __init__(self, table):
         self.table = table
-        self.tail_page_cache = {}
+        #self.tail_page_cache = {}
 
 
     def __repr__(self):
@@ -63,12 +63,12 @@ class Query:
         base_pagerange_index = int(base_path.split("pagerange_")[1].split("/")[0])
 
         # Use cached tail page or fetch fresh
-        if base_pagerange_index in self.tail_page_cache:
-            tail_path, tail_page = self.tail_page_cache[base_pagerange_index]
-        else:
-            tail_path, _ = self.table.get_tail_page_location(base_pagerange_index)
-            tail_page = self.table.bufferpool.get_page(tail_path)
-            self.tail_page_cache[base_pagerange_index] = (tail_path, tail_page)
+        # if base_pagerange_index in self.tail_page_cache:
+        #     tail_path, tail_page = self.tail_page_cache[base_pagerange_index]
+        # else:
+        tail_path, _ = self.table.get_tail_page_location(base_pagerange_index)
+        tail_page = self.table.bufferpool.get_page(tail_path)
+            #self.tail_page_cache[base_pagerange_index] = (tail_path, tail_page)
 
         # Write to appropriate page
         if tail_page.has_capacity():
@@ -79,7 +79,7 @@ class Query:
             new_page = Page()
             new_page.write(record)
             self.table.bufferpool.add_frame(new_path, new_page)
-            self.tail_page_cache[base_pagerange_index] = (new_path, new_page)
+            #self.tail_page_cache[base_pagerange_index] = (new_path, new_page)
             insert_path, offset = new_path, 0
 
         # Update metadata
@@ -341,12 +341,12 @@ class Query:
             self.table.current_tail_rid += 1
 
             # Get or create tail page using cache
-            if base_pagerange_index in self.tail_page_cache:
-                current_tail_path, current_tail_page = self.tail_page_cache[base_pagerange_index]
-            else:
-                current_tail_path, _ = self.table.get_tail_page_location(base_pagerange_index)
-                current_tail_page = self.table.bufferpool.get_page(current_tail_path)
-                self.tail_page_cache[base_pagerange_index] = (current_tail_path, current_tail_page)
+            #if base_pagerange_index in self.tail_page_cache:
+             #   current_tail_path, current_tail_page = self.tail_page_cache[base_pagerange_index]
+            #else:
+            current_tail_path, _ = self.table.get_tail_page_location(base_pagerange_index)
+            current_tail_page = self.table.bufferpool.get_page(current_tail_path)
+                #self.tail_page_cache[base_pagerange_index] = (current_tail_path, current_tail_page)
 
             # Handle page capacity
             if current_tail_page.has_capacity():
@@ -357,7 +357,7 @@ class Query:
                 new_page = Page()
                 new_page.write(original_copy)
                 self.table.bufferpool.add_frame(new_path, new_page)
-                self.tail_page_cache[base_pagerange_index] = (new_path, new_page)
+                #self.tail_page_cache[base_pagerange_index] = (new_path, new_page)
                 insert_path, offset = new_path, 0
 
             self.table.page_directory[original_copy.rid] = [insert_path, offset]
@@ -390,12 +390,12 @@ class Query:
 
         # Write new tail record
         base_pagerange_index = int(base_path.split("pagerange_")[1].split("/")[0])
-        if base_pagerange_index in self.tail_page_cache:
-            current_tail_path, current_tail_page = self.tail_page_cache[base_pagerange_index]
-        else:
-            current_tail_path, _ = self.table.get_tail_page_location(base_pagerange_index)
-            current_tail_page = self.table.bufferpool.get_page(current_tail_path)
-            self.tail_page_cache[base_pagerange_index] = (current_tail_path, current_tail_page)
+        #if base_pagerange_index in self.tail_page_cache:
+        # #   current_tail_path, current_tail_page = self.tail_page_cache[base_pagerange_index]
+        #else:
+        current_tail_path, _ = self.table.get_tail_page_location(base_pagerange_index)
+        current_tail_page = self.table.bufferpool.get_page(current_tail_path)
+            #self.tail_page_cache[base_pagerange_index] = (current_tail_path, current_tail_page)
 
         if current_tail_page.has_capacity():
             current_tail_page.write(record)
@@ -405,7 +405,7 @@ class Query:
             new_page = Page()
             new_page.write(record)
             self.table.bufferpool.add_frame(new_path, new_page)
-            self.tail_page_cache[base_pagerange_index] = (new_path, new_page)
+            #self.tail_page_cache[base_pagerange_index] = (new_path, new_page)
             insert_path, offset = new_path, 0
 
         self.table.page_directory[record.rid] = [insert_path, offset]
@@ -415,7 +415,8 @@ class Query:
         self.table.pr_unmerged_updates[base_pagerange_index] += 1
         if self.table.pr_unmerged_updates[base_pagerange_index] >= MERGE_THRESH:
             self.table.merge(base_pagerange_index)
-
+        
+        
         return True
 
     
