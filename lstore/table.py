@@ -124,79 +124,121 @@ class Table:
                 return False
 
     def _merge(self, page_range_index):
-        with self.merge_lock:
-            start_time = time.time()
-            print(f"Merge started with merge count: {self.merge_count}")
-            
-            ### Step 2. Loading out-of-date base pages
-            
-            # Make a copy of base pages in bufferpool and get tail page references
-            all_base_records = {}  # Map of base_rid -> base_record
-            tail_page_references = {}  # Map of base_rid -> tail_page_location
-            base_pages = []
-            base_dir = os.path.join(self.path, f"pagerange_{page_range_index}", "base")
-            print(len(self.bufferpool.frames))
-            for base_file in sorted(os.listdir(base_dir)):
-                base_path = os.path.join(base_dir, base_file)
-                base_page = self.bufferpool.get_page(base_path)
-                working_copy = copy.deepcopy(base_page)
-                base_pages.append(working_copy) # Copy the working page 
+        try:
+            with self.merge_lock:
+                start_time = time.time()
+                print(f"Merge started with merge count: {self.merge_count}")
                 
-                self.bufferpool.rename_frame(base_path, base_path + "_original")
+                # Capture current tail record boundary for committed records
+                commit_boundary = self.current_tail_rid
                 
-                # Create new frame for working copy
-                new_frame = Frame(page=working_copy, page_path=base_path)
-                new_frame.set_dirty_bit()  # Mark as dirty to ensure it's written
-                self.bufferpool.frames[base_path] = new_frame
-                for base_record in base_page.read_all():
-                    all_base_records[base_record.base_rid] = base_record   
-                    tail_page_references[base_record.base_rid] = self.page_directory[base_record.indirection][0]
+                # Step 1: Prepare base pages and create working copies
+                all_base_records = {}  # Map of base_rid -> base_record
+                tail_page_references = {}  # Map of base_rid -> tail_page_location
+                base_pages = []
+                base_dir = os.path.join(self.path, f"pagerange_{page_range_index}", "base")
+                
+                # Take a snapshot of the page directory to avoid race conditions
+                with self.write_merge_lock:
+                    page_directory_snapshot = copy.deepcopy(self.page_directory)
+                
+                # Process all base pages
+                for base_file in sorted(os.listdir(base_dir)):
+                    base_path = os.path.join(base_dir, base_file)
+                    base_page = self.bufferpool.get_page(base_path)
+                    working_copy = copy.deepcopy(base_page)
+                    base_pages.append(working_copy)
                     
-            print(len(self.bufferpool.frames))
-            
-            # Convert tail_page_references to a sorted list by last index value
-            tail_page_paths = list(tail_page_references.values())
-            tail_page_paths.sort(key=lambda x: int(x.split('page_')[-1]))  # Sort by page number
-            
-            # Get the tail records
-            all_tail_records = []
-            for path in tail_page_paths:
-                tail_page = self.bufferpool.get_page(path)
-                if tail_page:
-                    all_tail_records.extend(tail_page.read_all())
+                    # Store original base page with _original suffix
+                    self.bufferpool.rename_frame(base_path, base_path + "_original")
                     
-            ### Step 3. Merging base and tail records
-            updated_records = {rid: False for rid in all_base_records.keys()}
-            num_merged = 0
-            max_merged = len(all_base_records)
-            
-            for i, tail_record in enumerate(reversed(all_tail_records)):
-                if i < self.page_range_tps[page_range_index]:
-                    break
-                if not updated_records[tail_record.base_rid]: # If base record has not been updated
-                    base_record = all_base_records[tail_record.base_rid]
-                    updated_records[tail_record.base_rid] = True
+                    # Create new frame for working copy
+                    new_frame = Frame(page=working_copy, page_path=base_path)
+                    new_frame.set_dirty_bit()
+                    self.bufferpool.frames[base_path] = new_frame
                     
-                    # update the base record
-                    base_record.columns = tail_record.columns
-                    base_record.last_updated_time = time.time()
-                    
-                    # Step 4. Write the updated base record to the current page or create a new page
-                    path, offset = self.page_directory[base_record.rid]
-                    path_index = int(path.split('page_')[-1])
-                    base_pages[path_index].overwrite_index(offset, base_record)
-                    
-                    # do the merge until max_merged is reached or all tail records are merged
-                    num_merged += 1
-                    if num_merged == max_merged:
-                        break  
-                    
-            
-            self.page_range_tps[page_range_index] = int(all_tail_records[-1].rid[1:])
-            
-            merge_duration = time.time() - start_time
-            #print("old page dir", self.page_directory)
-            #print(f"Merging completed in {merge_duration:.8f} seconds.")
+                    # Process each record in base page
+                    for base_record in base_page.read_all():
+                        all_base_records[base_record.base_rid] = base_record
+                        
+                        # Only include records with valid tail pointers
+                        if (isinstance(base_record.indirection, str) and 
+                            base_record.indirection.startswith('t') and 
+                            base_record.indirection in page_directory_snapshot):
+                            tail_page_references[base_record.base_rid] = page_directory_snapshot[base_record.indirection][0]
+                
+                # Step 2: Find all committed tail pages and records
+                # Get only tail pages that contain committed records (before commit_boundary)
+                tail_dir = os.path.join(self.path, f"pagerange_{page_range_index}", "tail")
+                committed_tail_paths = set()
+                
+                # First pass: collect all tail page paths mentioned in the directory snapshot
+                for path in tail_page_references.values():
+                    committed_tail_paths.add(path)
+                
+                # Get all committed tail records
+                all_tail_records = []
+                for path in sorted(list(committed_tail_paths)):
+                    tail_page = self.bufferpool.get_page(path)
+                    if tail_page:
+                        # Only include tail records that are committed (with RID < commit_boundary)
+                        for record in tail_page.read_all():
+                            if (record.rid.startswith('t') and 
+                                int(record.rid[1:]) < commit_boundary and
+                                int(record.rid[1:]) > self.page_range_tps.get(page_range_index, 0)):
+                                all_tail_records.append(record)
+                
+                # Sort tail records by their RID (newest first)
+                all_tail_records.sort(key=lambda r: int(r.rid[1:]) if r.rid.startswith('t') else 0, reverse=True)
+                
+                # Step 3: Merging base and tail records
+                updated_records = {rid: False for rid in all_base_records.keys()}
+                num_merged = 0
+                max_merged = len(all_base_records)
+                
+                # Process tail records newest to oldest
+                for tail_record in all_tail_records:
+                    if tail_record.base_rid in all_base_records and not updated_records[tail_record.base_rid]:
+                        # If this base record hasn't been updated yet in this merge
+                        base_record = all_base_records[tail_record.base_rid]
+                        updated_records[tail_record.base_rid] = True
+                        
+                        # Update the base record with tail record data
+                        base_record.columns = tail_record.columns
+                        base_record.last_updated_time = time.time()
+                        
+                        # Write the updated base record
+                        if base_record.rid in page_directory_snapshot:
+                            path, offset = page_directory_snapshot[base_record.rid]
+                            path_index = int(path.split('page_')[-1])
+                            if path_index < len(base_pages):
+                                base_pages[path_index].overwrite_index(offset, base_record)
+                        
+                        # Count merged records
+                        num_merged += 1
+                        if num_merged >= max_merged:
+                            break
+                
+                # Step 4: Update the TPS (tail page sequence) for this page range
+                if all_tail_records:
+                    # Record the highest tail RID we've merged so we don't reprocess these again
+                    self.page_range_tps[page_range_index] = max(
+                        int(all_tail_records[0].rid[1:]) if all_tail_records else 0,
+                        self.page_range_tps.get(page_range_index, 0)
+                    )
+                
+                # Reset unmerged updates counter
+                self.pr_unmerged_updates[page_range_index] = 0
+                
+                merge_duration = time.time() - start_time
+                print(f"Merging completed in {merge_duration:.2f} seconds. Merged {num_merged} records.")
+                self.merge_count += 1
+
+        except Exception as e:
+            print(f"Error during merge: {e}")
+            import traceback
+            traceback.print_exc()
+            # Ensure we don't leave the counter in a bad state
             self.pr_unmerged_updates[page_range_index] = 0
             
     def archive_table(self):

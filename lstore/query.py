@@ -321,6 +321,9 @@ class Query:
         base_path, base_offset = self.table.page_directory[base_rid]
         base_record = self.table.bufferpool.get_page(base_path).read_index(base_offset)
         
+        if primary_key == 92106529:
+            print(f"funny base record: {base_record} \nColumns to change to: {[*columns]}")
+        
         # Determine if this is the first update by checking if indirection points to itself
         is_first_update = base_record.indirection == base_record.rid
         
@@ -331,6 +334,8 @@ class Query:
         else: # If first record tail record add an extra modified base record to the tail
             original_copy = Record(base_record.rid, base_record.rid, "t" + str(self.table.current_tail_rid), time.time(), [1 if col is not None else 0 for col in [*columns]], base_record.columns)
             self.table.current_tail_rid += 1
+            if primary_key == 92106529:
+                print(f"funny new record: {original_copy}")
             
             # Write the modified to tail page
             base_pagerange_index = int(base_path.split("pagerange_")[1].split("/")[0])

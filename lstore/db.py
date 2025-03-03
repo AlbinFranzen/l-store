@@ -23,18 +23,16 @@ class Database:
     
     def close(self):
         """Close database and save all tables and indices"""
-        # First, wait for any ongoing merge operations to complete
+        # Wait for any ongoing merge operations to complete
         for name, table in self.tables.items():
-            if hasattr(table, 'merge_thread') and table.merge_thread is not None:
-                if table.merge_thread.is_alive():
-                    print(f"Waiting for merge to complete on table '{name}'...")
-                    try:
-                        # Set a timeout of 30 seconds to avoid hanging indefinitely
-                        table.merge_thread.join(timeout=30)
-                        if table.merge_thread.is_alive():
-                            print(f"Warning: Merge operation on table '{name}' timed out, continuing anyway")
-                    except Exception as e:
-                        print(f"Error waiting for merge thread: {e}")
+            if table.merge_thread and table.merge_thread.is_alive():
+                print(f"Waiting for merge to complete on table '{name}'...")
+                try:
+                    table.merge_thread.join(timeout=30)  # Wait up to 30 seconds
+                    if table.merge_thread.is_alive():
+                        print(f"Warning: Merge operation on table '{name}' timed out")
+                except Exception as e:
+                    print(f"Error waiting for merge thread: {e}")
             
         
         # Save database metadata
