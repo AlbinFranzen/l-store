@@ -288,6 +288,14 @@ class Database:
             except Exception as e:
                 print(f"Error saving index for {table_name}: {e}")
             
+            # Force write ALL pages, not just dirty ones
+            for page_path, frame in table.bufferpool.frames.items():
+                try:
+                    with open(page_path, 'wb') as f:
+                        f.write(frame.page.serialize())
+                except Exception as e:
+                    print(f"Error writing page {page_path}: {e}")
+                    
             # Flush buffer pool
             if table.bufferpool:
                 for page_path, frame in table.bufferpool.frames.items():

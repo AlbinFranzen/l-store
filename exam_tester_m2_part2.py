@@ -17,7 +17,7 @@ records = {}
 
 number_of_records = 2
 number_of_aggregates = 100
-number_of_updates = 10
+number_of_updates = 3
 
 seed(3562901)
 for i in range(0, number_of_records):

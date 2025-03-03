@@ -21,7 +21,7 @@ records = {}
 
 number_of_records = 2
 number_of_aggregates = 100
-number_of_updates = 10
+number_of_updates = 3
 
 seed(3562901)
 for i in range(0, number_of_records):
@@ -59,6 +59,7 @@ for _ in range(number_of_updates):
             updated_columns[i] = value
             # update our test directory
             records[key][i] = value
+        print('update', key, updated_columns)
         query.update(key, *updated_columns)
         record = query.select(key, 0, [1, 1, 1, 1, 1])[0]
         error = False
@@ -82,4 +83,6 @@ for i in range(0, number_of_aggregates):
         pass
         # print('sum on [', keys[r[0]], ',', keys[r[1]], ']: ', column_sum)
 print("Aggregate finished")
+
+print(grades_table.page_directory)
 db.close()

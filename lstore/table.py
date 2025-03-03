@@ -176,6 +176,7 @@ class Table:
                     if num_merged == max_merged:
                         break  
                     
+            
             self.page_range_tps[page_range_index] = int(all_tail_records[-1].rid[1:])
             
             merge_duration = time.time() - start_time

@@ -16,26 +16,17 @@ query.insert(51, 4, 6)
 query.update(51, None, None, 10)
 query.update(51, None, 5, None)
 
-for path, offset in query.table.page_directory.values():
-    print(f"record: {query.table.bufferpool.get_page(path).read_index(offset)}")
-    
-test_table.merge(0)
-
-test_table.merge_thread.join()
-print("\nAfter merge:")
-for path, offset in query.table.page_directory.values():
-    print(f"record: {query.table.bufferpool.get_page(path).read_index(offset)}")
-
-#print("\n selected", query.select_version(51, 0, [1, 1, 1], -2))
-
-#db.close()
+db.close()
 # test_table.merge_thread.join()
 
-# print("Opening table")
-# db.open('./ECS165')
+print("Opening table")
+db.open('./ECS165')
 
-# new_test_table = db.get_table('test_table')
-# query = Query(new_test_table)
+new_test_table = db.get_table('test_table')
+query = Query(new_test_table)
+
+for path, offset in query.table.page_directory.values():
+    print(f"record: {query.table.bufferpool.get_page(path).read_index(offset)}")
 
 # # b0_path, offset = new_test_table.page_directory["b0"][0]
 # # print(f"b0 path: {b0_path}")

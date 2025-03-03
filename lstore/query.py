@@ -293,7 +293,7 @@ class Query:
         results = []
         for rid in rid_list:
             temp_rid = rid
-            for i in range(abs(relative_version-1)):
+            for i in range(abs(relative_version-2)):
                 temp_record_path, offset = self.table.page_directory[temp_rid]
                 temp_record = self.table.bufferpool.get_page(temp_record_path).read_index(offset)
                 temp_rid = temp_record.indirection
@@ -326,7 +326,6 @@ class Query:
         
         # Determine if this is the first update by checking if indirection points to itself
         is_first_update = base_record.indirection == base_record.rid
-        print(f"Is first update: {is_first_update}")
         
         # Get last tail record 
         if not is_first_update:
@@ -406,7 +405,7 @@ class Query:
         self.table.pr_unmerged_updates[base_pagerange_index] += 1
         # Call merge directly if the number of records exceeds the threshold
         if self.table.pr_unmerged_updates[base_pagerange_index] >= MERGE_THRESH:
-            #self.table.merge(base_pagerange_index)  # Call the merge method to start the merging thread
+            self.table.merge(base_pagerange_index)  # Call the merge method to start the merging thread
             pass
 
         return True
@@ -449,17 +448,17 @@ class Query:
         rids = self.table.index.locate_range(start_range, end_range, 0)
         if rids == False:
             return False
-        
+        rids = list(rids.values())
         #traverse tree for each rid found in range
-        for rid in rids:
-            lineage = self._traverse_lineage(rid)
-            target_index = 0
-                
-            #print(f"Lineage length: {len(lineage)} and Relative version:, {relative_version} ")
-            
-            record = lineage[target_index]
-            results += record.columns[aggregate_column_index]
-            {}
+        
+        for rid in rids:     
+            temp_rid = rid
+            for i in range(abs(relative_version-2)):
+                temp_record_path, offset = self.table.page_directory[temp_rid]
+                temp_record = self.table.bufferpool.get_page(temp_record_path).read_index(offset)
+                temp_rid = temp_record.indirection
+                       
+            range_sum += temp_record.columns[aggregate_column_index]
         return range_sum
             # lineage = self._traverse_lineage(rid)
             # if relative_version - 1 < 0:
