@@ -296,7 +296,10 @@ class Query:
             for i in range(abs(relative_version-2)):
                 temp_record_path, offset = self.table.page_directory[temp_rid]
                 temp_record = self.table.bufferpool.get_page(temp_record_path).read_index(offset)
-                temp_rid = temp_record.indirection
+                temp_rid = temp_record.indirection  
+                if temp_rid == temp_record.base_rid:
+                    break
+                #print(temp_rid)
                 
             modified_record = copy.deepcopy(temp_record) 
             modified_record.columns = [element for element, bit in zip(temp_record.columns, projected_columns_index) if bit == 1]

@@ -39,7 +39,8 @@ for path, offset in query.table.page_directory.values():
 # print(f"\nquery select: {query.select(51, 0, [1, 1, 1])} ")
 # base_records = test_table.bufferpool.get_page(os.path.join(test_table.path, "pagerange_0/base/page_0")).read_all()
 # tail_records = test_table.bufferpool.get_page(os.path.join(test_table.path, "pagerange_0/tail/page_0")).read_all()
-# print(f"base recs: {base_records}\ntail records: {tail_records}")
+#print(f"base recs: {base_records}\ntail records: {tail_records}")
+db.close()
 
 
 
