@@ -6,7 +6,7 @@ import copy
 from lstore.index import Index
 from  lstore.config import PAGE_SIZE, PAGE_RANGE_SIZE
 # from lstore.page_range import PageRange
-from lstore.bufferpool import BufferPool
+from lstore.bufferpool import BufferPool, Frame
 from lstore.page import Page
 
 INDIRECTION_COLUMN = 0
@@ -48,6 +48,9 @@ class Table:
         self.bufferpool = BufferPool(self.path)
         self._init_page_range_storage()
         self.last_path = os.path.join(self.path, "pagerange_0/base/page_0")
+        self.current_base_rid = 0
+        self.current_tail_rid = 0
+        
 
         # Add a record cache to minimize disk reads
         self.record_cache = {}  # {primary_key: record}
@@ -102,8 +105,10 @@ class Table:
 
         self.latest_tail_indices = {0:0}
         for path in [base_path, tail_path]:
-            with open(os.path.join(path, "page_0"), 'wb') as f:
-                f.write(Page().serialize())
+            page_0_path = os.path.join(path, "page_0")
+            if not os.path.exists(page_0_path):  # Only create if it doesn't exist
+                with open(page_0_path, 'wb') as f:
+                    f.write(Page().serialize())
 
     def __repr__(self):
         return f"Name: {self.name}\nKey: {self.key}\nNum columns: {self.num_columns}\nPage_directory: {self.page_directory}\nindex: {self.index}"
@@ -130,14 +135,24 @@ class Table:
             tail_page_references = {}  # Map of base_rid -> tail_page_location
             base_pages = []
             base_dir = os.path.join(self.path, f"pagerange_{page_range_index}", "base")
+            print(len(self.bufferpool.frames))
             for base_file in sorted(os.listdir(base_dir)):
                 base_path = os.path.join(base_dir, base_file)
                 base_page = self.bufferpool.get_page(base_path)
-                base_pages.append(copy.deepcopy(base_page)) # Copy the working page 
-                self.bufferpool.frames[base_path].page_path = os.path.join(base_path, "_original") # Rename page
+                working_copy = copy.deepcopy(base_page)
+                base_pages.append(working_copy) # Copy the working page 
+                
+                self.bufferpool.rename_frame(base_path, base_path + "_original")
+                
+                # Create new frame for working copy
+                new_frame = Frame(page=working_copy, page_path=base_path)
+                new_frame.set_dirty_bit()  # Mark as dirty to ensure it's written
+                self.bufferpool.frames[base_path] = new_frame
                 for base_record in base_page.read_all():
                     all_base_records[base_record.base_rid] = base_record   
                     tail_page_references[base_record.base_rid] = self.page_directory[base_record.indirection][0]
+                    
+            print(len(self.bufferpool.frames))
             
             # Convert tail_page_references to a sorted list by last index value
             tail_page_paths = list(tail_page_references.values())

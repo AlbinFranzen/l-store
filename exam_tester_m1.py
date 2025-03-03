@@ -72,7 +72,6 @@ for key in records:
             error = True
     if error:
         print('update error on', records[key], 'and', updated_columns, ':', record, ', correct:', records[key])
-        print("here")
     else:
         #print(records[key], [*updated_columns] )
         pass

@@ -195,6 +195,28 @@ class BufferPool:
         """
         if page_path in self.frames:
             self.frames[page_path].set_dirty_bit()
+            
+    def rename_frame(self, old_path, new_path):
+        """
+        Rename a frame in the buffer pool atomicially
+        """
+        # Check if the original frame exists
+        if old_path not in self.frames:
+            return False
+            
+        # Get the frame without removing it first (to avoid race conditions)
+        frame = self.frames[old_path]
+        
+        # Create a copy of the frame with updated path
+        frame.set_page_path(new_path)
+        
+        # Add the frame under the new key
+        self.frames[new_path] = frame
+        
+        # Now remove the old key (only after new one is added)
+        del self.frames[old_path]
+    
+        return True
 
 
 

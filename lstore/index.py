@@ -186,6 +186,22 @@ class Index:
         for key in rng:
             result[key] = self.indices[column][key].decode('utf-8')
         return result if result else False
+    
+    def __getstate__(self):
+        """
+        Control what gets pickled - exclude the table reference
+        """
+        state = self.__dict__.copy()
+        # Remove the table reference as it contains unpickleable locks
+        if 'table' in state:
+            state['table'] = None
+        return state
+
+    def __setstate__(self, state):
+        """
+        Control what happens during unpickling
+        """
+        self.__dict__.update(state)
 
 
 """

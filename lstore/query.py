@@ -15,17 +15,10 @@ class Query:
     """
     def __init__(self, table):
         self.table = table
-        self.current_base_rid = 0
-        self.current_tail_rid = 0
 
 
     def __repr__(self):
-        return f"Table:\n{self.table}\ncurrent_base_rid: {self.current_base_rid}\ncurrent_tail_rid: {self.current_tail_rid}"
-
-
-    def update_base_rid(self):
-        self.current_base_rid += 1
-        pass
+        return f"Table:\n{self.table}"
     
     
     """
@@ -56,7 +49,7 @@ class Query:
         record = Record(
                         base_record.rid,
                         last_tail_record.rid,
-                        "t" + str(self.current_tail_rid),
+                        "t" + str(self.table.current_tail_rid),
                         time.time(),
                         schema_encoding = [0] * len(base_record.schema_encoding),
                         columns = [None] * len(base_record.columns)
@@ -93,7 +86,7 @@ class Query:
         self.table.page_directory[record.rid] = [insert_path, offset]
         self.table.index.add_record(record)
         
-        self.current_tail_rid += 1
+        self.table.current_tail_rid += 1
         self.table.pr_unmerged_updates[base_pagerange_index] += 1
         # Call merge directly if the number of records exceeds the threshold
         if self.table.pr_unmerged_updates[base_pagerange_index] >= MERGE_THRESH:
@@ -118,7 +111,7 @@ class Query:
 
         if not self._verify_insert_input(*columns):
             return False
-        record = Record(f"b{self.current_base_rid}", f"b{self.current_base_rid}", f"b{self.current_base_rid}", time.time(), [0] * len(columns), [*columns])
+        record = Record(f"b{self.table.current_base_rid}", f"b{self.table.current_base_rid}", f"b{self.table.current_base_rid}", time.time(), [0] * len(columns), [*columns])
         self.table.index.add_record(record)
         
         last_path = self.table.last_path
@@ -150,8 +143,8 @@ class Query:
             self.table.last_path = insert_path
             self.table.bufferpool.add_frame(insert_path, new_page)
         
-        self.table.page_directory[f"b{self.current_base_rid}"] = [insert_path, offset]
-        self.current_base_rid += 1
+        self.table.page_directory[f"b{self.table.current_base_rid}"] = [insert_path, offset]
+        self.table.current_base_rid += 1
         return True
     
     def _verify_insert_input(self, *columns):
@@ -189,6 +182,7 @@ class Query:
         rid_combined_string = self.table.index.locate(search_key_index, search_key)
         if rid_combined_string == False:
             return False
+        
         rid_list = rid_combined_string.split(",")
         
         # Merge the lineage
@@ -197,7 +191,6 @@ class Query:
             new_record = self._get_merged_lineage(rid, projected_columns_index)
             if new_record:
                 records.append(new_record)
-            
         return records if records else False
 
 
@@ -217,7 +210,7 @@ class Query:
             if base_offset >= base_page.num_records:
                 print(f"Base record offset {base_offset} out of range (page has {base_page.num_records} records)")
                 return None
-                
+            
             base_record = base_page.read_index(base_offset)
             
             # Get latest tail record
@@ -286,7 +279,8 @@ class Query:
     def select_version(self, search_key, search_key_index, projected_columns_index, relative_version):
         rids_combined = self.table.index.locate(search_key_index, search_key)
         if not rids_combined:
-            print("No records found")
+            
+            print("No records found", search_key, search_key_index)
             return None
         rid_list = rids_combined.split(",")
         # Here, each element in record_lineages is already a lineage (a list of records)
@@ -335,8 +329,8 @@ class Query:
             last_tail_path, last_tail_offset = self.table.page_directory[base_record.indirection]
             last_tail_record = self.table.bufferpool.get_page(last_tail_path).read_index(last_tail_offset)
         else: # If first record tail record add an extra modified base record to the tail
-            original_copy = Record(base_record.rid, base_record.rid, "t" + str(self.current_tail_rid), time.time(), [1 if col is not None else 0 for col in [*columns]], base_record.columns)
-            self.current_tail_rid += 1
+            original_copy = Record(base_record.rid, base_record.rid, "t" + str(self.table.current_tail_rid), time.time(), [1 if col is not None else 0 for col in [*columns]], base_record.columns)
+            self.table.current_tail_rid += 1
             
             # Write the modified to tail page
             base_pagerange_index = int(base_path.split("pagerange_")[1].split("/")[0])
@@ -373,7 +367,7 @@ class Query:
                 new_schema[i] = last_tail_record.schema_encoding[i]
                 new_cols[i] = last_tail_record.columns[i]
 
-        record = Record(base_record.rid, last_tail_record.rid, "t" + str(self.current_tail_rid), time.time(), new_schema, new_cols)
+        record = Record(base_record.rid, last_tail_record.rid, "t" + str(self.table.current_tail_rid), time.time(), new_schema, new_cols)
         # delete old record in index
         # add new record to index
 
@@ -403,11 +397,12 @@ class Query:
 
         # Update directory
         self.table.page_directory[record.rid] = [insert_path, offset]
-        self.current_tail_rid += 1
+        self.table.current_tail_rid += 1
 
         self.table.pr_unmerged_updates[base_pagerange_index] += 1
         # Call merge directly if the number of records exceeds the threshold
         if self.table.pr_unmerged_updates[base_pagerange_index] >= MERGE_THRESH:
+            print("Merging pagerange", base_pagerange_index)
             self.table.merge(base_pagerange_index)  # Call the merge method to start the merging thread
             pass
 

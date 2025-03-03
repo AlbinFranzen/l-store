@@ -19,7 +19,7 @@ query = Query(grades_table)
 # dictionary for records to test the database: test directory
 records = {}
 
-number_of_records = 2
+number_of_records = 1000
 number_of_aggregates = 100
 number_of_updates = 1
 
@@ -27,7 +27,6 @@ seed(3562901)
 for i in range(0, number_of_records):
     key = 92106429 + i
     records[key] = [key, randint(0, 20), randint(0, 20), randint(0, 20), randint(0, 20)]
-    print('insert', key, records[key])
     query.insert(*records[key])
 keys = sorted(list(records.keys()))
 print("Insert finished")
@@ -59,7 +58,6 @@ for _ in range(number_of_updates):
             updated_columns[i] = value
             # update our test directory
             records[key][i] = value
-        print('update', key, updated_columns)
         query.update(key, *updated_columns)
         record = query.select(key, 0, [1, 1, 1, 1, 1])[0]
         error = False
@@ -83,5 +81,5 @@ for i in range(0, number_of_aggregates):
         pass
         # print('sum on [', keys[r[0]], ',', keys[r[1]], ']: ', column_sum)
 print("Aggregate finished")
-
+    
 db.close()
