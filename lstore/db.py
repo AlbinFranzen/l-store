@@ -21,6 +21,7 @@ class Database:
             with open(meta_path, 'rb') as f:
                 self.table_directory = pickle.load(f).get('table_directory', {})
     
+
     def close(self):
         """Close database and save all tables and indices"""
         # Wait for any ongoing merge operations to complete
@@ -79,10 +80,12 @@ class Database:
         }
         return table
 
+
     def drop_table(self, name):
         if name in self.tables:
             del self.tables[name]
             del self.table_directory[name]
+
 
     def get_table(self, name):
         # Return existing table

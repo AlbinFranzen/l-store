@@ -1,4 +1,3 @@
-import os
 import bisect
 
 class Index:
@@ -24,12 +23,7 @@ class Index:
     def create_index(self, column_number):
         if column_number < 0 or column_number >= self.num_columns:
             return False
-        index_dir = "indexes"
-        os.makedirs(index_dir, exist_ok=True)
-        index_file = os.path.join(index_dir, f"{self.table_name}_index_{column_number}.txt")
-        if os.path.exists(index_file):
-            os.remove(index_file)
-        self.indices[column_number] = BPlusTree(index_file, order=75, cache_size=10000)
+        self.indices[column_number] = BPlusTree()
 
 
     def refresh_indexes(self, table):
@@ -50,6 +44,7 @@ class Index:
             base_path, base_offset = locations[0]
             print("base path: " + base_path)
             base_record = table.bufferpool.get_page(base_path).read_index(base_offset)
+            table.bufferpool.unpin_page(base_path)
             self.add_record(base_record)
 
 
@@ -208,11 +203,10 @@ class Index:
 B+ Tree implementation from scratch
 """
 class BPlusTree:
-    def __init__(self, index_file=None, order=75, cache_size=10000):
+    def __init__(self, order=75):
         self.order = order
         self.max_keys = order - 1
         self.root = BPlusTreeNode(is_leaf=True)
-        self.serializable_path = index_file
 
     def search(self, key):
         node = self.root

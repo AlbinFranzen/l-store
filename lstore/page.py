@@ -14,7 +14,6 @@ class Page:
 
     def write(self, record):  # Append record
         if not self.has_capacity():
-            # print("Maximum capacity of PAGE_RECORD_SIZE records has been reached.")
             return
         self.data.append(record)
         self.num_records += 1
@@ -22,11 +21,9 @@ class Page:
     
     def overwrite_index(self, index, record):  # Overwrite record at index
         self.data[index] = record
-        pass
 
     def overwrite_rid(self, index, value):  # Overwrite the rid at index
         self.data[index].rid = value
-        pass
 
     def read_all(self):  # Read all records
         return self.data
