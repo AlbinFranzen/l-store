@@ -129,7 +129,6 @@ class BufferPool:
         Returns:
             Page object or None if error
         """
-        print(f"Writing page to disk: {self.io_count}")
         self.io_count += 1
         try:
             if not os.path.exists(page_path):

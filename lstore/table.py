@@ -40,6 +40,7 @@ class Table:
         self.bufferpool = BufferPool(self.path)
         self.tail_page_locations = []    # {page_range_index: path_to_last_tail_page} for each page range
         self.base_page_locations = []    # {page_range_index: path_to_last_base_page} for each page range
+        self.tail_page_indices = [0] # Index of last tail page for each page range
         self._init_page_range_storage()
         self.last_path = os.path.join(self.path, "pagerange_0/base/page_0")
         self.current_base_rid = 0
