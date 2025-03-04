@@ -50,7 +50,10 @@ for key in records:
         pass
         # print('select on', key, ':', record)
 print("Select finished")
+val = 0
 for key in records:
+    val += 1
+    print(val)
     updated_columns = [None, None, None, None, None]
     for i in range(2, grades_table.num_columns):
         # updated value

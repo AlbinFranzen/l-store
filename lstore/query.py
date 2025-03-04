@@ -101,9 +101,6 @@ class Query:
         
         last_path = self.table.base_page_locations[len(self.table.base_page_locations) - 1]
         last_page = self.table.bufferpool.get_page(last_path)
-
-        last_page = self.table.bufferpool.get_page(last_path)
-        self.table.bufferpool.unpin_page(last_path)
         last_pagerange_index, last_page_index = self._parse_page_path(last_path)
         
         if last_page.has_capacity():
@@ -112,6 +109,7 @@ class Query:
             self.table.base_page_locations[last_pagerange_index] = last_path
             insert_path = self.table.last_path
             offset = last_page.num_records - 1
+            self.table.bufferpool.unpin_page(last_path)
         else:
             new_page = Page() 
             new_page.write(record)
@@ -250,7 +248,6 @@ class Query:
         # Retrieve base record
         base_path, base_offset = self.table.page_directory[base_rid]
         base_record = self.table.bufferpool.get_page(base_path).read_index(base_offset)
-        self.table.bufferpool.unpin_page(base_path)
 
         is_first_update = base_record.indirection == base_record.rid
 
@@ -280,11 +277,12 @@ class Query:
                 self.table.bufferpool.update_page(current_tail_path, make_dirty=True)
                 insert_path, offset = current_tail_path, current_tail_page.num_records - 1
             else:
+                
                 new_path = f"{self.table.path}/pagerange_{base_pagerange_index}/tail/page_{self.table.tail_page_indices[base_pagerange_index] + 1}"
                 new_page = Page()
                 new_page.write(original_copy)
                 self.table.bufferpool.add_frame(new_path, new_page)
-                self.table.bufferpool.update_page(current_tail_path, make_dirty=True)
+                self.table.bufferpool.update_page(new_path, make_dirty=True)
                 self.table.tail_page_locations[base_pagerange_index] = new_path
                 self.table.tail_page_indices[base_pagerange_index] += 1
                 insert_path, offset = new_path, new_page.num_records - 1
@@ -317,11 +315,14 @@ class Query:
         # Update base record pointers
         base_record.schema_encoding = new_schema
         base_record.indirection = record.rid
+        self.table.bufferpool.unpin_page(base_path)
+        self.table.bufferpool.update_page(base_path, make_dirty=True)
 
         # Write new tail record
         base_pagerange_index = int(base_path.split("pagerange_")[1].split("/")[0])
         
         current_tail_path = self.table.tail_page_locations[base_pagerange_index]
+        print(current_tail_path)
         current_tail_page = self.table.bufferpool.get_page(current_tail_path)
 
         if current_tail_page.has_capacity():
