@@ -4,12 +4,16 @@ from lstore.table import Table
 
 class Database:
     def __init__(self):
-        self.tables = {}
-        self.table_directory = {}
-        self.db_path = None
+        self.tables = {}            # names of tables in the database
+        self.table_directory = {}   # "name": name, "num_columns": num_columns, "key_index": key_index
+        self.db_path = None         # path to the database directory
+
 
     def open(self, path):
-        """Open database at specified path"""
+        """Open database at specified path, with tables and indices from disk
+        Args:
+            path (str): path to the database directory
+        """
         self.db_path = path
         os.makedirs(path, exist_ok=True)
         os.makedirs(os.path.join(path, "_tables"), exist_ok=True)
@@ -34,7 +38,6 @@ class Database:
                 except Exception as e:
                     print(f"Error waiting for merge thread: {e}")
             
-        
         # Save database metadata
         with open(os.path.join(self.db_path, "db_metadata.pickle"), 'wb') as f:
             pickle.dump({'table_directory': self.table_directory}, f)
@@ -73,6 +76,10 @@ class Database:
             
 
     def create_table(self, name, num_columns, key_index):
+        """ create table with specified name, number of columns, and key index
+        Args:
+            name (str): name of the table, num_columns (int): number of columns in the table, key_index (int): index of the key column   
+        """
         table = Table(name, num_columns, key_index, self.db_path)
         self.tables[name] = table
         self.table_directory[name] = {
@@ -82,6 +89,7 @@ class Database:
 
 
     def drop_table(self, name):
+        #should probably remove from disk :D
         if name in self.tables:
             del self.tables[name]
             del self.table_directory[name]

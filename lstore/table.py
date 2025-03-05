@@ -10,12 +10,12 @@ from lstore.page import Page
 class Record:
 
     def __init__(self, base_rid, indirection, rid, start_time, schema_encoding, columns, last_updated_time=None):
-        self.indirection = indirection
-        self.rid = rid
+        self.indirection = indirection          # points to rid of previous versioned record. base record points to most recent record -> next most recent
+        self.rid = rid                          # rid = 'b' + base_rid for base record, rid = 't' + tail_rid for tail record
         self.start_time = start_time
-        self.schema_encoding = schema_encoding
-        self.columns = columns
-        self.base_rid = base_rid
+        self.schema_encoding = schema_encoding  # bit list of 0's and 1's
+        self.columns = columns                  # primary key is the first column
+        self.base_rid = base_rid                # base_rid of the record (necessary for merge) when the record is a base record this is the same as rid
 
     def __repr__(self):
         return f"indirection: {self.indirection}  |  rid: {self.rid}  |  start_time: {self.start_time}  |  schema_encoding: {self.schema_encoding}  |  columns: {self.columns}\n"
@@ -29,26 +29,21 @@ class Table:
     """
     def __init__(self, name, num_columns, key, db_path):
         # Table metadata
-        self.name = name
-        self.key = key
+        self.name = name                                    # specifies table_name
+        self.key = key                                      # specifies table_name_v
         self.num_columns = num_columns
-        self.path = os.path.join(db_path,"_tables", name)
-        self.archival_path = os.path.join(db_path, "_archives", name)
-        self.pr_unmerged_updates = [0]      # Unmerged updates per page range
-        self.page_directory = {}
-        self.index = Index(self)
-        self.bufferpool = BufferPool(self.path)
-        self.tail_page_locations = []    # {page_range_index: path_to_last_tail_page} for each page range
-        self.base_page_locations = []    # {page_range_index: path_to_last_base_page} for each page range
-        self.tail_page_indices = [0] # Index of last tail page for each page range
-        self._init_page_range_storage()
-        self.last_path = os.path.join(self.path, "pagerange_0/base/page_0")
-        self.current_base_rid = 0
-        self.current_tail_rid = 0
-        
-        # Add a record cache to minimize disk reads
-        self.record_cache = {}  # {primary_key: record}
-        self.max_cache_size = 10000
+        self.path = os.path.join(db_path,"_tables", name)   # On disk file path
+        self.pr_unmerged_updates = [0]                      # Unmerged updates per page range
+        self.page_directory = {}                            # {rid: (path, offset)} for each record
+        self.index = Index(self)                            # Index object for this table (glorifed b+ tree storing <rid,value> pairs) 
+        self.bufferpool = BufferPool(self.path)             # Bufferpool object for this table
+        self.tail_page_locations = []                       # {page_range_index: path_to_last_tail_page} for each page range
+        self.base_page_locations = []                       # {page_range_index: path_to_last_base_page} for each page range
+        self.tail_page_indices = [0]                      # Index of last tail page for each page range
+        self._init_page_range_storage()                     # Initialize page range storage directories with base and tail page 0
+        self.last_path = os.path.join(self.path, "pagerange_0/base/page_0") # Path to last base page on disk (for insert)
+        self.current_base_rid = 0                           # Rid of last base record
+        self.current_tail_rid = 0                           # Rid of last tail record
 
         # Merging attributes
         self.merge_count = 0

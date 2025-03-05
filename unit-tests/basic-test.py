@@ -13,6 +13,7 @@ for i in range(0, 10):
     query.insert(i, i, i)
 
 for i in range(0, 10):
+    print("")
     for key, value in test_table.page_directory.items():
         print(f"Key: {key}, Value: {value}")
     query.update(i, None, None, 10*i)

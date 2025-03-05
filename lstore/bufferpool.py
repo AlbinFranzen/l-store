@@ -8,22 +8,24 @@ class BufferPool:
         """
         Initialize buffer pool with specified size
         """
-        self.table_path = table_path
-        self.pool_size = POOL_SIZE
-        self.io_count = 0
-        self.frames = OrderedDict()  # {page_path: Frame}; Use OrderedDict to implement LRU - most recently used items are at the end
+        self.table_path = table_path        # on disk path to the table
+        self.pool_size = POOL_SIZE          # number of frames in the buffer pool
+        self.io_count = 0                   # io operation counter (optimization metric)
+        self.frames = OrderedDict()         # {page_path: Frame}; Use OrderedDict to implement LRU - most recently used items are at the end
         
+
     def __repr__(self):
         frames_str = "\n".join(f"  {k}: {v}" for k, v in self.frames.items())
         return f"BufferPool(size={self.pool_size}) Frames:\n{frames_str}\n"
+
 
     def _update_lru(self, page_path):
         """
         Move accessed page to end of LRU order
         """
         if page_path in self.frames:
-            frame = self.frames.pop(page_path)
-            self.frames[page_path] = frame
+            frame = self.frames.pop(page_path)      # remove from path from current location in dict
+            self.frames[page_path] = frame          # add it back to the end of the dict (most recently used)
         
 
     def evict_page(self):
@@ -34,18 +36,20 @@ class BufferPool:
         """            
         try:  
             # First try to evict non-dirty pages
-            for page_path, frame in list(self.frames.items()):
-                if frame.pin_count == 0 and not frame.dirty_bit:
-                    del self.frames[page_path]
-                    return True
-
-            # If no non-dirty pages available, try dirty pages
+            firstPurePage = None
             for page_path, frame in list(self.frames.items()):
                 if frame.pin_count == 0:
-                    # Write dirty page to disk
-                    self.write_to_disk(page_path, frame.page)            
-                    del self.frames[page_path]
-                    return True
+                    if not frame.dirty_bit:
+                        del self.frames[page_path]
+                        return True
+                    elif firstPurePage is None:
+                        firstPurePage = frame
+
+            # If no non-dirty pages, evict the first dirty page
+            if firstPurePage is not None:
+                del self.frames[firstPurePage]
+                self.write_to_disk(page_path, frame.page)
+                return True
                     
             # If we get here, all pages are pinned
             print("Warning: All pages are pinned, cannot evict")
@@ -88,6 +92,7 @@ class BufferPool:
 
     def abs_remove_frame(self, page_path):
         """
+        !!! Internal use only !!!
         Remove a frame from the buffer pool without writing to disk
         Args:
             page_path: path to the page file
@@ -107,6 +112,7 @@ class BufferPool:
             page_path: path to the page file
             page: page object to write
         """
+        self.io_count += 1
         try:
             # Ensure directory exists
             os.makedirs(os.path.dirname(page_path), exist_ok=True)
@@ -167,23 +173,6 @@ class BufferPool:
         return None
 
 
-    def update_page(self, page_path, make_dirty=False):
-        """
-        Update a page in the buffer pool or disk
-        Args:
-            page_path: path to the page file
-            data: data to write
-        Returns:
-            True if successful, False if error
-        """
-        # Check if page is in buffer pool
-        frame = self.frames.get(page_path)
-        if frame and make_dirty:
-            frame.set_dirty_bit()
-
-        return True
-
-
     def unpin_page(self, page_path):
         """
         Decrement pin count for a page
@@ -202,7 +191,7 @@ class BufferPool:
 
     def rename_frame(self, old_path, new_path):
         """
-        Rename a frame in the buffer pool atomicially
+        Rename a frame in the buffer pool atomicially (later)
         """
         # Check if the original frame exists
         if old_path not in self.frames:
