@@ -4,60 +4,54 @@ from lstore.table import Table
 
 class Database:
     def __init__(self):
-        self.tables = {}            # In-memory cache of tables
-        self.table_directory = {}   # Basic table info - "name": {"num_columns": num_columns, "key_index": key_index}
+        self.tables = {}            # names of tables in the database
+        self.table_directory = {}   # "name": name, "num_columns": num_columns, "key_index": key_index
         self.db_path = None         # path to the database directory
 
+
     def open(self, path):
-        """Open database at specified path, with tables and indices from disk"""
+        """Open database at specified path, with tables and indices from disk
+        Args:
+            path (str): path to the database directory
+        """
         self.db_path = path
         os.makedirs(path, exist_ok=True)
         os.makedirs(os.path.join(path, "_tables"), exist_ok=True)
         os.makedirs(os.path.join(path, "indexes"), exist_ok=True)
         
-        # Load database metadata (just table directory info)
+        # Load database metadata
         meta_path = os.path.join(path, "db_metadata.pickle")
         if os.path.exists(meta_path):
             with open(meta_path, 'rb') as f:
-                self.table_directory = pickle.load(f)
-        
-        # Clear any cached tables
-        self.tables = {}
+                self.table_directory = pickle.load(f).get('table_directory', {})
+    
 
     def close(self):
-        """Close database and save all tables metadata and indices"""
+        """Close database and save all tables and indices"""
         # Wait for any ongoing merge operations to complete
         for name, table in self.tables.items():
-            if hasattr(table, 'merge_thread') and table.merge_thread and table.merge_thread.is_alive():
+            if table.merge_thread and table.merge_thread.is_alive():
                 try:
-                    table.merge_thread.join(timeout=30)
+                    table.merge_thread.join(timeout=30)  # Wait up to 30 seconds
                     if table.merge_thread.is_alive():
                         print(f"Warning: Merge operation on table '{name}' timed out")
                 except Exception as e:
                     print(f"Error waiting for merge thread: {e}")
-        
-        # Save basic table directory info
+            
+        # Save database metadata
         with open(os.path.join(self.db_path, "db_metadata.pickle"), 'wb') as f:
-            pickle.dump(self.table_directory, f)
+            pickle.dump({'table_directory': self.table_directory}, f)
         
-        # Save each table's metadata and index separately
+        # Save each table and its indices
         for name, table in self.tables.items():
-            # Save complete table metadata
+            # Save table metadata
             metadata = {
                 'name': name,
                 'num_columns': table.num_columns,
                 'key': table.key,
                 'page_directory': table.page_directory,
                 'current_base_rid': table.current_base_rid,
-                'current_tail_rid': table.current_tail_rid,
-                'tail_page_locations': table.tail_page_locations,
-                'base_page_locations': table.base_page_locations,
-                'tail_page_indices': table.tail_page_indices,
-                'pr_unmerged_updates': table.pr_unmerged_updates,
-                'page_range_tps': table.page_range_tps,
-                'original_per_page_range': table.original_per_page_range,
-                'last_path': table.last_path,
-                'merge_count': table.merge_count
+                'current_tail_rid': table.current_tail_rid
             }
             
             # Save metadata
@@ -76,68 +70,52 @@ class Database:
             with open(index_path, 'wb') as f:
                 pickle.dump(index_data, f)
                 
-            # Write any dirty buffer pages to disk
-            for path, frame in table.bufferpool.frames.items():
-                if frame.dirty_bit:
-                    table.bufferpool.write_to_disk(path, frame.page)
+            # Write buffer pages to disk
+            for frame in table.bufferpool.frames.values():
+                table.bufferpool.write_to_disk(frame.page_path, frame.page)
+            
 
     def create_table(self, name, num_columns, key_index):
-        """Create table with specified name, number of columns, and key index"""
+        """ create table with specified name, number of columns, and key index
+        Args:
+            name (str): name of the table, num_columns (int): number of columns in the table, key_index (int): index of the key column   
+        """
         table = Table(name, num_columns, key_index, self.db_path)
         self.tables[name] = table
         self.table_directory[name] = {
-            "num_columns": num_columns, "key_index": key_index
+            "name": name, "num_columns": num_columns, "key_index": key_index
         }
         return table
 
+
     def drop_table(self, name):
-        """Remove table from memory and directory"""
+        #should probably remove from disk :D
         if name in self.tables:
             del self.tables[name]
-            
-        if name in self.table_directory:
             del self.table_directory[name]
-            
-        # Remove metadata and index files
-        meta_path = os.path.join(self.db_path, "_tables", f"{name}_metadata.pickle")
-        if os.path.exists(meta_path):
-            os.remove(meta_path)
-            
-        index_path = os.path.join(self.db_path, "_tables", f"{name}_index.pickle")
-        if os.path.exists(index_path):
-            os.remove(index_path)
+
 
     def get_table(self, name):
-        """Get table by name, creating a new instance from metadata"""
-        # Return existing table if it's already loaded
+        # Return existing table
         if name in self.tables:
             return self.tables[name]
         
-        # Check if table metadata exists
+        # Try to load from metadata
         metadata_path = os.path.join(self.db_path, "_tables", f"{name}_metadata.pickle")
         if os.path.exists(metadata_path):
             try:
-                # Load metadata
                 with open(metadata_path, 'rb') as f:
                     metadata = pickle.load(f)
                 
-                # Create fresh table instance
+                # Create table and restore its state
                 table = Table(name, metadata['num_columns'], metadata['key'], self.db_path)
+                table.page_directory = metadata.get('page_directory', {})
                 
-                # Apply metadata to reconstruct table state
-                table.page_directory = metadata['page_directory']
-                table.current_base_rid = metadata['current_base_rid']
-                table.current_tail_rid = metadata['current_tail_rid']
-                table.tail_page_locations = metadata['tail_page_locations']
-                table.base_page_locations = metadata['base_page_locations']
-                table.tail_page_indices = metadata['tail_page_indices']
-                table.pr_unmerged_updates = metadata['pr_unmerged_updates']
-                table.page_range_tps = metadata['page_range_tps']
-                table.original_per_page_range = metadata['original_per_page_range']
-                table.last_path = metadata['last_path']
-                table.merge_count = metadata.get('merge_count', 0)
+                # Restore base/tail RIDs
+                table.current_base_rid = metadata.get('current_base_rid', 0)
+                table.current_tail_rid = metadata.get('current_tail_rid', 0)
                 
-                # Load index data separately
+                # Load index data
                 index_path = os.path.join(self.db_path, "_tables", f"{name}_index.pickle")
                 if os.path.exists(index_path):
                     with open(index_path, 'rb') as f:
@@ -145,18 +123,16 @@ class Database:
                         # Apply index data to the newly created index
                         table.index.primary_key_cache = index_data.get('primary_key_cache', {})
                         table.index.indices = index_data.get('indices', {})
-                        table.index.sorted_records = index_data.get('sorted_records', [])
+                        table.index.sorted_records = index_data.get('sorted_records', []) 
                 
                 # Add to tables dictionary
                 self.tables[name] = table
                 return table
                 
             except Exception as e:
-                print(f"Error loading {name} metadata: {e}")
-                import traceback
-                traceback.print_exc()
+                print(f"Error loading {name}: {e}")
         
-        # Fall back to table directory if metadata doesn't exist
+        # Fall back to table directory
         if name in self.table_directory:
             info = self.table_directory[name]
             table = Table(name, info["num_columns"], info["key_index"], self.db_path)

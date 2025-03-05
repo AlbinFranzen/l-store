@@ -29,35 +29,42 @@ class BufferPool:
         
 
     def evict_page(self):
+
         """
         Evict least recently used unpinned page, prioritizing non-dirty pages
         Returns:
             True if page was evicted or space was available, False if no page could be evicted
-        """            
-        try:  
-            # First try to evict non-dirty pages
-            firstPurePage = None
-            for page_path, frame in list(self.frames.items()):
-                if frame.pin_count == 0:
-                    if not frame.dirty_bit:
-                        del self.frames[page_path]
-                        return True
-                    elif firstPurePage is None:
-                        firstPurePage = frame
-
-            # If no non-dirty pages, evict the first dirty page
-            if firstPurePage is not None:
-                del self.frames[firstPurePage]
-                self.write_to_disk(page_path, frame.page)
-                return True
+        """
+        if len(self.frames) < self.pool_size:
+            return True
                     
-            # If we get here, all pages are pinned
-            print("Warning: All pages are pinned, cannot evict")
-            return False
+        #try:  
+        # First try to evict non-dirty pages
+        first_dirty_page_path = None
+        
+        for page_path, frame in list(self.frames.items()):
+            if frame.pin_count == 0:
+                if not frame.dirty_bit:
+                    del self.frames[page_path] # Found clean unpinned page - delete immediately
+                    return True
+                elif first_dirty_page_path is None:
+                    # Keep track of first dirty unpinned page path
+                    first_dirty_page_path = page_path
+                    
+        # If no clean pages, evict the first dirty page
+        if first_dirty_page_path is not None:
+            dirty_frame = self.frames[first_dirty_page_path]
+            self.write_to_disk(first_dirty_page_path, dirty_frame.page)
+            del self.frames[first_dirty_page_path]
+            return True
+                
+        # If we get here, all pages are pinned
+        print("Warning: All pages are pinned, cannot evict")
+        return False
 
-        except Exception as e:
-            print(f"Error during page eviction: {e}")
-            return False
+        #except Exception as e:
+        #    print(f"Error during page eviction: {e}")
+        #    return False
         
 
     def add_frame(self, page_path, page_data=None):

@@ -12,14 +12,11 @@ query = Query(test_table)
 for i in range(0, 10):
     query.insert(i, i, i)
 
+for i in range(0, 25):
+    query.update(0, None, None, 10*i)
+
+
 for i in range(0, 10):
-    print("")
-    for key, value in test_table.page_directory.items():
-        print(f"Key: {key}, Value: {value}")
-    query.update(i, None, None, 10*i)
-
-
-for i in range(0, 5):
     print(query.select(i, 0, [1, 1, 1]))
 
 # print("Page Directory:")

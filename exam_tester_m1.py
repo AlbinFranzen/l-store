@@ -11,7 +11,7 @@ db = Database()
 #   The third argument is determining the which columns will be primay key
 #       Here the first column would be student id and primary key
 db.open('./ECS165')
-grades_table = db.create_table('Grades', 5, 0)
+grades_table =  ('Grades', 5, 0)
 
 # create a query class for the grades table
 query = Query(grades_table)

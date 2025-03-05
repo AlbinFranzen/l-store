@@ -6,6 +6,7 @@ from lstore.index import Index
 from lstore.config import PAGE_SIZE, PAGE_RANGE_SIZE
 from lstore.bufferpool import BufferPool
 from lstore.page import Page
+import copy
 
 class Record:
 
@@ -94,65 +95,66 @@ class Table:
     def _merge(self, page_range_index):
         try:
             with self.merge_lock:
-                start_time = time.time()
                 
                 # Get the last merged TPS for this page range
                 last_tps = self.page_range_tps.get(page_range_index, 0)
+                        
                 
-                # Step 1: Process base pages without deep copying
-                base_dir = os.path.join(self.path, f"pagerange_{page_range_index}", "base")
-                base_pages = [os.path.join(base_dir, f) for f in sorted(os.listdir(base_dir))]
+                # Get all the base records
+                base_dir = os.path.join(self.path, f"pagerange_{page_range_index}", "base/page_")
+                base_paths = [base_dir + str(f) for f in range(len(self.base_page_locations))]
                 
-                # Step 2: Fetch only new tail records since last TPS
-                tail_dir = os.path.join(self.path, f"pagerange_{page_range_index}", "tail")
-                tail_files = sorted(
-                    [f for f in os.listdir(tail_dir) if f.startswith("page_")],
-                    key=lambda x: int(x.split('_')[1])
-                )
+                tail_paths = set()
+                # Loop through base pages to get tail page paths
+                for path in base_paths:
+                    base_page = self.bufferpool.get_page(path)
+                    base_records = base_page.read_all()
+                    for base_record in base_records:
+                        tail_rid = base_record.indirection
+                        if base_record.indirection == base_record.rid: # if base record has not been updated
+                            continue
+                        tail_path, _ = self.page_directory[tail_rid]
+                        tail_paths.add(tail_path)
+                    self.bufferpool.unpin_page(path)
                 
-                # Collect new tail records
-                new_tail_records = []
-                for tf in tail_files:
-                    page_num = int(tf.split('_')[1])
-                    if page_num * PAGE_SIZE < last_tps:
-                        continue  # Skip already processed pages
-                    tail_path = os.path.join(tail_dir, tf)
-                    tail_page = self.bufferpool.get_page(tail_path)
-                    for record in tail_page.read_all():
-                        rid_num = int(record.rid[1:]) if record.rid.startswith('t') else 0
-                        if rid_num > last_tps:
-                            new_tail_records.append(record)
+                tail_paths = list(tail_paths)
+                # Sort tail paths by page number
+                tail_paths.sort(key=lambda x: int(x.split('_')[-1]))
                 
-                # Sort new records by RID descending (newest first)
-                new_tail_records.sort(key=lambda r: int(r.rid[1:]), reverse=True)
-                
-                # Step 3: Update base records incrementally
                 updated_rids = set()
-                for record in new_tail_records:
-                    if record.base_rid in updated_rids:
-                        continue  # Each base RID only once per merge
-                    # Fetch base record from bufferpool
-                    base_path, offset = self.page_directory.get(f"b{record.base_rid}", (None, None))
-                    if not base_path:
-                        continue
-                    base_page = self.bufferpool.get_page(base_path)
-                    base_record = base_page.read(offset)
-                    if base_record:
-                        # Update base record
-                        base_record.columns = record.columns
-                        base_record.schema_encoding = record.schema_encoding
-                        base_page.write(offset, base_record)
-                        updated_rids.add(record.base_rid)
-                
-                # Update TPS to the highest processed RID
-                if new_tail_records:
-                    new_tps = max(int(r.rid[1:]) for r in new_tail_records)
-                    self.page_range_tps[page_range_index] = new_tps
+                first_update = False
+                reached_last_tps = False
+                #traverse the tail pages in reverse to add most recent updates to the base page
+                for tail_path in reversed(tail_paths):
+                    if reached_last_tps: # if we have reached the last tps, stop
+                        break
+                    new_tail_records = self.bufferpool.get_page(tail_path).read_all()
+                    self.bufferpool.unpin_page(tail_path)
+                    if first_update == False: # set new tps to the last rid in the tail page
+                        last_tps_temp = int(new_tail_records[-1].rid[1:])
+                        first_update = True
+                    for record in reversed(new_tail_records): 
+                        if int(record.rid[1:]) <= last_tps:
+                            reached_last_tps = True
+                            break
+                        #if you find previous update skip
+                        if record.base_rid in updated_rids:
+                            continue  # Each base RID only once per merge
+                        # Fetch base record from bufferpool
+                        base_path, offset = self.page_directory[record.base_rid]
+                        if not base_path:
+                            print("no path found")
+                            continue
+                        base_page = self.bufferpool.get_page(base_path)
+                        base_record = base_page.read_index(offset)
+                        if base_record:
+                            # Update base record
+                            base_record.columns = record.columns
+                            updated_rids.add(record.base_rid)
                 
                 # Reset unmerged updates
+                self.page_range_tps[page_range_index] = last_tps_temp
                 self.pr_unmerged_updates[page_range_index] = 0
-                
-                merge_duration = time.time() - start_time
 
         except Exception as e:
             print(f"Merge error: {e}")
