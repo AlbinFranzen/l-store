@@ -57,6 +57,7 @@ class Transaction:
         """
         self.queries = []  # List of (query_function, table, args) tuples
         self.changes = []  # Track changes for rollback: (table, rid, is_insert)
+
         # Track locks in order of acquisition with their granularity and mode
         self.held_locks = OrderedDict()  # {item_id: (granularity, mode)}
         # Get unique transaction ID thread-safely
@@ -98,6 +99,7 @@ class Transaction:
         page_type = dirs[1]  # "base" or "tail"
         page_num = dirs[2]   # "page_X"
 
+        # Generate lock IDs for each granularity level
         table_lock_id = f"{table_name}"
         page_range_id = f"{table_name}/pagerange_{page_range_num}"
         page_lock_id = f"{table_name}/pagerange_{page_range_num}/{page_type}/{page_num}"
@@ -130,7 +132,7 @@ class Transaction:
             for query, table, args in self.queries:
                 print(f"\nT{self.transaction_id} executing {query.__name__} with args: {args}")
 
-                # Determine lock type and acquire appropriate locks
+                # Determine lock type and acquire appropriate locks, what about delete?
                 is_write = "update" in query.__name__ or "insert" in query.__name__
                 lock_mode = LockMode.EXCLUSIVE if is_write else LockMode.SHARED
 
@@ -179,8 +181,12 @@ class Transaction:
 
 
     def _acquire_insert_locks(self, table, lock_mode):
-        """Helper method to acquire locks for insert operations"""
+        """
+        Helper method to acquire locks for insert operations
+        Inserts require table lock
+        """
         print(f"T{self.transaction_id} requesting table lock for INSERT")
+        # Acquire table lock from lock manager
         if not self.lock_manager.acquire_lock(
                 self.transaction_id,
                 table.name,
@@ -189,6 +195,7 @@ class Transaction:
         ):
             print(f"T{self.transaction_id} failed to acquire table lock")
             return False
+        # {item_id: (granularity, mode)}
         self.held_locks[table.name] = (LockGranularity.TABLE, lock_mode)
         return True
 

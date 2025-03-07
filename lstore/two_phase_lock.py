@@ -110,7 +110,17 @@ class TwoPhaseLock:
     def _check_parent_locks(self, transaction_id: int, item_id: str, mode: LockMode, granularity: LockGranularity) -> bool:
         """
         Checks for conflicts with parent resource locks.
+
+        Args:
+            transaction_id: ID of transaction requesting lock
+            item_id: Resource identifier (e.g., "table/page_1/rid_2")
+            mode: Type of lock requested (SHARED/EXCLUSIVE)
+            granularity: Level of lock requested (TABLE/PAGE_RANGE/PAGE/RECORD)
+
+        Returns:
+            True if no conflicts with parent locks, False otherwise
         """
+        # Split item_id into parts to check parent locks
         parts = item_id.split('/')
         print(f"\nChecking parent locks for T{transaction_id} requesting {LockMode.to_string(mode)} "
               f"lock on {LockGranularity.to_string(granularity)} {item_id}")
@@ -119,6 +129,7 @@ class TwoPhaseLock:
         parent_locks = []
         table_id = parts[0]
 
+        # Build parent locks based on granularity level
         if granularity >= LockGranularity.RECORD:
             page_id = f"{parts[0]}/{parts[1]}/{parts[2]}/{parts[3]}"
             page_range_id = f"{parts[0]}/{parts[1]}"
@@ -139,7 +150,9 @@ class TwoPhaseLock:
         # Check each parent lock for conflicts
         for lock_id, lock_dict in parent_locks:
             if (lock_id in lock_dict and
+                    # Check if exclusive lock owned by another transaction
                     lock_dict[lock_id]["writer"] is not None and
+                    # Check if exclusive lock is not owned by this transaction
                     lock_dict[lock_id]["writer"] != transaction_id):
                 print(f"DENIED: {lock_id} is exclusively locked by T{lock_dict[lock_id]['writer']}")
                 return False
@@ -191,7 +204,7 @@ class TwoPhaseLock:
                 print(f"T{transaction_id} already has lock on {item_id}")
                 return True
 
-            # Check parent locks (hierarchical locking)
+            # Check if parent locks conflict (hierarchical locking)
             if not self._check_parent_locks(transaction_id, item_id, mode, granularity):
                 return False
 
