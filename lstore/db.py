@@ -55,7 +55,6 @@ class Database:
                 'tail_page_indices': table.tail_page_indices,
                 'pr_unmerged_updates': table.pr_unmerged_updates,
                 'page_range_tps': table.page_range_tps,
-                'original_per_page_range': table.original_per_page_range,
                 'last_path': table.last_path,
                 'merge_count': table.merge_count
             }
@@ -133,7 +132,6 @@ class Database:
                 table.tail_page_indices = metadata['tail_page_indices']
                 table.pr_unmerged_updates = metadata['pr_unmerged_updates']
                 table.page_range_tps = metadata['page_range_tps']
-                table.original_per_page_range = metadata['original_per_page_range']
                 table.last_path = metadata['last_path']
                 table.merge_count = metadata.get('merge_count', 0)
                 

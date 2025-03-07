@@ -11,7 +11,7 @@ db = Database()
 #   The third argument is determining the which columns will be primay key
 #       Here the first column would be student id and primary key
 db.open('./ECS165')
-grades_table =  ('Grades', 5, 0)
+grades_table =  db.create_table('Grades', 5, 0)
 
 # create a query class for the grades table
 query = Query(grades_table)
@@ -19,7 +19,7 @@ query = Query(grades_table)
 # dictionary for records to test the database: test directory
 records = {}
 
-number_of_records = 2
+number_of_records = 10000
 number_of_aggregates = 100
 seed(3562901)
 
@@ -62,8 +62,9 @@ for key in records:
         updated_columns[i] = value
         # update our test directory
         updated_records[key][i] = value
+    
     query.update(key, *updated_columns)
-
+    
     #check version -1 for record
     record = query.select_version(key, 0, [1, 1, 1, 1, 1], -1)[0]
     error = False

@@ -54,7 +54,6 @@ class Table:
         
         # TPS for each page_range
         self.page_range_tps = {0: 0}
-        self.original_per_page_range = [[0]*PAGE_RANGE_SIZE]
 
 
     def _init_page_range_storage(self):

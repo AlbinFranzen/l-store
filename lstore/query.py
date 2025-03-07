@@ -100,35 +100,35 @@ class Query:
         
         last_path = self.table.base_page_locations[len(self.table.base_page_locations) - 1]
         last_page = self.table.bufferpool.get_page(last_path)
-
-        last_page = self.table.bufferpool.get_page(last_path)
         self.table.bufferpool.unpin_page(last_path)
         last_pagerange_index, last_page_index = self._parse_page_path(last_path)
         
         if last_page.has_capacity():
             last_page.write(record)
-            self.table.bufferpool.update_page(last_path, make_dirty=True)
-            self.table.tail_page_locations[last_pagerange_index] = last_path
+            self.table.bufferpool.mark_dirty(last_path)
+            self.table.base_page_locations[last_pagerange_index] = last_path
             insert_path = self.table.last_path
             offset = last_page.num_records - 1
         else:
             new_page = Page() 
             new_page.write(record)
-            self.table.bufferpool.update_page(last_path, make_dirty=True)
+            self.table.bufferpool.mark_dirty(last_path)
 
             insert_path = last_path
             offset = 0
             if last_page_index + 1 < PAGE_RANGE_SIZE:
                 insert_path = f"{self.table.path}/pagerange_{last_pagerange_index}/base/page_{last_page_index + 1}"
-                self.table.pr_unmerged_updates.append(0)
+                self.table.base_page_locations[last_pagerange_index] = insert_path
             else:
                 new_pagerange_path = f"{self.table.path}/pagerange_{last_pagerange_index + 1}"
                 os.makedirs(f"{new_pagerange_path}/base", exist_ok=True)
                 os.makedirs(f"{new_pagerange_path}/tail", exist_ok=True)
                 insert_path = f"{new_pagerange_path}/base/page_0"
                 self.table.page_range_tps[last_pagerange_index + 1] = 0
-                self.table.tail_page_locations.append(insert_path)
-                self.table.original_per_page_range.append([0]*PAGE_RANGE_SIZE)
+                self.table.tail_page_locations.append(f"{new_pagerange_path}/tail/page_0")
+                self.table.base_page_locations.append(insert_path)
+                self.table.pr_unmerged_updates.append(0)
+                self.table.tail_page_indices.append(0)
                 first_tail_page = Page()
                 self.table.bufferpool.add_frame(f"{new_pagerange_path}/tail/page_0", first_tail_page)
     
@@ -182,72 +182,20 @@ class Query:
         # Merge the lineage
         records = []
         for rid in rid_list:
-            new_record = self._get_merged_lineage(rid, projected_columns_index)
+            base_path, base_offset = self.table.page_directory[rid]
+            base_page = self.table.bufferpool.get_page(base_path)
+            tail_rid = base_page.read_index(base_offset).indirection
+            self.table.bufferpool.unpin_page(base_path)
+            
+            tail_path, tail_offset = self.table.page_directory[tail_rid]
+            tail_page = self.table.bufferpool.get_page(tail_path)
+            tail_record = tail_page.read_index(tail_offset)
+            
+            new_record = copy.deepcopy(tail_record)
+            new_record.columns = [element for element, bit in zip(tail_record.columns, projected_columns_index) if bit == 1]
             if new_record:
                 records.append(new_record)
         return records if records else False
-
-
-    def _get_merged_lineage(self, base_rid, projected_columns_index):  
-        try:
-            if base_rid not in self.table.page_directory:
-                print(f"RID {base_rid} not found in page directory")
-                return None
-                
-            # Get base record
-            base_path, base_offset = self.table.page_directory[base_rid]
-            base_page = self.table.bufferpool.get_page(base_path)
-            self.table.bufferpool.unpin_page(base_path)
-            if base_page is None:
-                print(f"Base page not found at {base_path}")
-                return None
-                
-            if base_offset >= base_page.num_records:
-                print(f"Base record offset {base_offset} out of range (page has {base_page.num_records} records)")
-                return None
-            
-            base_record = base_page.read_index(base_offset)
-            
-            # Get latest tail record
-            last_tail_path, last_tail_offset = self.table.page_directory[base_record.indirection]
-            tail_page = self.table.bufferpool.get_page(last_tail_path)
-            self.table.bufferpool.unpin_page(last_tail_path)
-            if tail_page is None:
-                print(f"Tail page not found at {last_tail_path}")
-                return None
-                
-            if last_tail_offset >= tail_page.num_records:
-                print(f"Tail record offset {last_tail_offset} out of range (page has {tail_page.num_records} records)")
-                return None
-                
-            last_tail_record = tail_page.read_index(last_tail_offset)
-            
-            # Build the projected record
-            new_record = Record(
-                base_record.rid,
-                last_tail_record.rid, 
-                base_record.indirection,
-                last_tail_record.start_time,
-                last_tail_record.schema_encoding,
-                [element for element, bit in zip(last_tail_record.columns, projected_columns_index) if bit == 1]
-            )
-            return new_record
-        except Exception as e:
-            print(f"Error in _get_merged_lineage for {base_rid}: {e}")
-            return None
-
-
-    # Get list of records from base_rid
-    def _traverse_lineage(self, base_rid):
-        lineage = []
-        if isinstance(base_rid, bytes):
-            base_rid = base_rid.decode()  # Ensure base_rid is a string
-
-        if base_rid not in self.table.page_directory:
-            return []
-       
-        return lineage
-
 
     """
     # Read matching record with specified search key
@@ -273,11 +221,13 @@ class Query:
             temp_rid = rid
             for i in range(abs(relative_version-2)):
                 temp_record_path, offset = self.table.page_directory[temp_rid]
-                temp_record = self.table.bufferpool.get_page(temp_record_path).read_index(offset)
+                temp_record = self.table.bufferpool.get_page(temp_record_path).read_index(offset)    
+                #print(f"Iteration {i} Temp rid: {temp_rid}, Record: {temp_record}")
                 temp_rid = temp_record.indirection  
                 if temp_rid == temp_record.base_rid:
                     break
-                
+                self.table.bufferpool.unpin_page(temp_record_path)
+            
             modified_record = copy.deepcopy(temp_record) 
             modified_record.columns = [element for element, bit in zip(temp_record.columns, projected_columns_index) if bit == 1]
             results.append(temp_record)
@@ -301,7 +251,6 @@ class Query:
         # Retrieve base record
         base_path, base_offset = self.table.page_directory[base_rid]
         base_record = self.table.bufferpool.get_page(base_path).read_index(base_offset)
-        self.table.bufferpool.unpin_page(base_path)
 
         is_first_update = base_record.indirection == base_record.rid
 
@@ -323,19 +272,24 @@ class Query:
             self.table.current_tail_rid += 1
 
             current_tail_path = self.table.tail_page_locations[base_pagerange_index]
+            #print(self.table.bufferpool)
             current_tail_page = self.table.bufferpool.get_page(current_tail_path)
             
             # Handle page capacity
             if current_tail_page.has_capacity():
-                insert_path, offset = current_tail_path, current_tail_page.num_records - 1
+                offset = current_tail_page.num_records
+                current_tail_page.write(original_copy)
+                insert_path = current_tail_path
             else:
-                new_path = f"{self.table.path}/pagerange_{base_pagerange_index}/tail/page_{len(self.table.tail_page_locations)-1}"
+                new_path = f"{self.table.path}/pagerange_{base_pagerange_index}/tail/page_{self.table.tail_page_indices[base_pagerange_index]+1}"
                 new_page = Page()
+                offset = 0
                 new_page.write(original_copy)
+                self.table.tail_page_indices[base_pagerange_index] += 1
                 self.table.bufferpool.add_frame(new_path, new_page)
-                self.table.bufferpool.update_page(current_tail_path, make_dirty=True)
+                self.table.bufferpool.mark_dirty(current_tail_path)
                 self.table.tail_page_locations[base_pagerange_index] = new_path
-                insert_path, offset = new_path, 0
+                insert_path = new_path
 
             self.table.page_directory[original_copy.rid] = [insert_path, offset]
             last_tail_record = original_copy
@@ -365,6 +319,8 @@ class Query:
         # Update base record pointers
         base_record.schema_encoding = new_schema
         base_record.indirection = record.rid
+        self.table.bufferpool.mark_dirty(base_path)
+        self.table.bufferpool.unpin_page(base_path)
 
         # Write new tail record
         base_pagerange_index = int(base_path.split("pagerange_")[1].split("/")[0])
@@ -373,16 +329,20 @@ class Query:
         current_tail_page = self.table.bufferpool.get_page(current_tail_path)
 
         if current_tail_page.has_capacity():
+            offset = current_tail_page.num_records
             current_tail_page.write(record)
-            self.table.bufferpool.update_page(current_tail_path, make_dirty=True)
-            insert_path, offset = current_tail_path, current_tail_page.num_records - 1
+            self.table.bufferpool.mark_dirty(current_tail_path)
+            insert_path = current_tail_path
         else:
-            new_path = f"{self.table.path}/pagerange_{base_pagerange_index}/tail/page_{len(self.table.tail_page_locations)-1}"
+            new_path = f"{self.table.path}/pagerange_{base_pagerange_index}/tail/page_{self.table.tail_page_indices[base_pagerange_index]+1}"
             new_page = Page()
+            offset = 0
             new_page.write(record)
             self.table.bufferpool.add_frame(new_path, new_page)
-            self.table.bufferpool.update_page(new_path, make_dirty=True)
-            insert_path, offset = new_path, 0
+            self.table.bufferpool.mark_dirty(new_path)
+            self.table.tail_page_locations[base_pagerange_index] = new_path
+            self.table.tail_page_indices[base_pagerange_index] += 1
+            insert_path = new_path
 
         self.table.page_directory[record.rid] = [insert_path, offset]
         self.table.current_tail_rid += 1
@@ -413,9 +373,16 @@ class Query:
         rids = list(rid_dict.values())
         range_sum = 0
         for rid in rids:
-            merged_record = self._get_merged_lineage(rid, [1] * self.table.num_columns)
-            if merged_record and merged_record.columns[aggregate_column_index] is not None:
-                range_sum += merged_record.columns[aggregate_column_index]
+            base_path, base_offset = self.table.page_directory[rid]
+            base_page = self.table.bufferpool.get_page(base_path)
+            tail_rid = base_page.read_index(base_offset).indirection
+            self.table.bufferpool.unpin_page(base_path)
+            
+            tail_path, tail_offset = self.table.page_directory[tail_rid]
+            tail_page = self.table.bufferpool.get_page(tail_path)
+            tail_record = tail_page.read_index(tail_offset)
+            
+            range_sum += tail_record.columns[aggregate_column_index]
         return range_sum
       
     
@@ -435,6 +402,7 @@ class Query:
 
             return False
         rids = list(rids.values())
+        
         
         for rid in rids:     
             temp_rid = rid
