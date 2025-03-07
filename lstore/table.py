@@ -123,6 +123,7 @@ class Table:
                 updated_rids = set()
                 first_update = False
                 reached_last_tps = False
+                last_tps_temp = None
                 #traverse the tail pages in reverse to add most recent updates to the base page
                 for tail_path in reversed(tail_paths):
                     if reached_last_tps: # if we have reached the last tps, stop
