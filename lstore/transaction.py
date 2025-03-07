@@ -1,4 +1,5 @@
 import threading
+from collections import OrderedDict
 from lstore.index import Index
 from lstore.table import Table, Record
 from lstore.two_phase_lock import TwoPhaseLock, LockMode, LockGranularity
@@ -53,9 +54,12 @@ class Transaction:
         - Unique transaction ID
         - Empty query list
         - Reference to global lock manager
+        - Ordered tracking of acquired locks
         """
         self.queries = []  # List of (query_function, table, args) tuples
         self.changes = []  # Track changes for rollback: (table, rid, is_insert)
+        # Track locks in order of acquisition with their granularity and mode
+        self.held_locks = OrderedDict()  # {item_id: (granularity, mode)}
         # Get unique transaction ID thread-safely
         with Transaction.transaction_id_lock:
             self.transaction_id = Transaction.transaction_id_counter
@@ -139,6 +143,9 @@ class Transaction:
                         print(f"T{self.transaction_id} failed to acquire table lock")
                         return self.abort()
                     
+                    # Track acquired lock
+                    self.held_locks[table.name] = (LockGranularity.TABLE, lock_mode)
+                    
                     # Track insert for potential rollback
                     result = query(*args)
                     if result:  # If insert successful
@@ -153,24 +160,27 @@ class Transaction:
                     print(f"T{self.transaction_id} requesting locks for {query.__name__}")
                     print(f"Lock IDs: table={table_id}, page={page_id}, record={record_id}")
                     
-                    # Acquire locks in hierarchical order
+                    # Acquire locks in hierarchical order (largest to smallest granularity)
                     if not self.lock_manager.acquire_lock(
                         self.transaction_id, table_id, lock_mode, LockGranularity.TABLE
                     ):
                         print(f"T{self.transaction_id} failed to acquire table lock")
                         return self.abort()
+                    self.held_locks[table_id] = (LockGranularity.TABLE, lock_mode)
                         
                     if not self.lock_manager.acquire_lock(
                         self.transaction_id, page_id, lock_mode, LockGranularity.PAGE
                     ):
                         print(f"T{self.transaction_id} failed to acquire page lock")
                         return self.abort()
+                    self.held_locks[page_id] = (LockGranularity.PAGE, lock_mode)
                         
                     if not self.lock_manager.acquire_lock(
                         self.transaction_id, record_id, lock_mode, LockGranularity.RECORD
                     ):
                         print(f"T{self.transaction_id} failed to acquire record lock")
                         return self.abort()
+                    self.held_locks[record_id] = (LockGranularity.RECORD, lock_mode)
 
                     # Track update for potential rollback
                     if "update" in query.__name__:
@@ -197,11 +207,8 @@ class Transaction:
         1. Mark all changes as deleted in reverse order:
            - For inserts: Delete the record using primary key
            - For updates: Delete the record using primary key
-        2. Release all locks
+        2. Release all locks in reverse order of acquisition (automatically handles granularity order)
         3. Return False to indicate transaction failure
-        
-        Note: Both inserts and updates need to be marked as deleted.
-        We use Query.delete() which creates a deletion marker in tail pages.
         """
         print(f"\nAborting Transaction T{self.transaction_id}")
         
@@ -216,13 +223,12 @@ class Transaction:
                 query = Query(table)
                 query.delete(primary_key)
         
-        # Release all locks held by this transaction
-        if self.lock_manager and self.transaction_id in self.lock_manager.transactions:
-            transaction = self.lock_manager.transactions[self.transaction_id]
-            # Release locks in reverse order (record -> page -> table)
-            for granularity in [LockGranularity.RECORD, LockGranularity.PAGE, LockGranularity.TABLE]:
-                for item_id in list(transaction.locks[granularity]):
-                    self.lock_manager.release_lock(self.transaction_id, item_id)
+        # Release all locks in reverse order of acquisition
+        # This automatically handles granularity order since we acquired in correct order
+        if self.lock_manager:
+            for item_id in reversed(self.held_locks):
+                self.lock_manager.release_lock(self.transaction_id, item_id)
+            self.held_locks.clear()
         
         print(f"T{self.transaction_id} abort complete")
         return False
@@ -234,18 +240,17 @@ class Transaction:
         
         Commit Process:
         1. Ensure all changes are written to storage
-        2. Release all locks in reverse order
+        2. Release all locks in reverse order of acquisition (automatically handles granularity order)
         3. Return True to indicate transaction success
         """
         print(f"\nCommitting Transaction T{self.transaction_id}")
         
-        # Release all locks held by this transaction
-        if self.lock_manager and self.transaction_id in self.lock_manager.transactions:
-            transaction = self.lock_manager.transactions[self.transaction_id]
-            # Release locks in reverse order (record -> page -> table)
-            for granularity in [LockGranularity.RECORD, LockGranularity.PAGE, LockGranularity.TABLE]:
-                for item_id in list(transaction.locks[granularity]):
-                    self.lock_manager.release_lock(self.transaction_id, item_id)
+        # Release all locks in reverse order of acquisition
+        # This automatically handles granularity order since we acquired in correct order
+        if self.lock_manager:
+            for item_id in reversed(self.held_locks):
+                self.lock_manager.release_lock(self.transaction_id, item_id)
+            self.held_locks.clear()
         
         print(f"T{self.transaction_id} commit complete")
         return True

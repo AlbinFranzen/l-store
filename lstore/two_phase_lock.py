@@ -219,7 +219,8 @@ class TwoPhaseLock:
             # Print current lock state for debugging
             print(f"Current lock state for {item_id}:")
             print(f"  - Readers: {lock_info['readers']}")
-            print(f"  - Writer: T{lock_info['writer']} if lock_info['writer'] is not None else 'None'")
+            writer_id = lock_info['writer']
+            print(f"  - Writer: {'T' + str(writer_id) if writer_id is not None else 'None'}")
             
             # Handle shared lock request
             if mode == LockMode.SHARED:
