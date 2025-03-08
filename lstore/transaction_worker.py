@@ -16,8 +16,11 @@ class TransactionWorker:
     1. Create worker with list of transactions
     2. Add additional transactions if needed
     3. Call run() to execute transactions in separate thread
-    4. Call join() to wait for completion and get results
+    4. Call join() to wait for completion
     """
+    
+    txn_worker_id_counter = 0                   # counts transaction ids
+    txn_worker_id_lock = threading.Lock()       # Ensures unique transaction IDs
 
     def __init__(self, transactions=None):
         """
@@ -25,18 +28,16 @@ class TransactionWorker:
             transactions: Optional list of transactions to execute
 
         State Management:
-            stats: List tracking success/failure of each transaction
-            result: Count of successful transactions
             thread: Thread for executing transactions
-            _stats_lock: Ensures thread-safe stats updates
         """
         if transactions is None:
             transactions = []
-        self.stats = []                             # Track success/failure of each transaction
         self.transactions = transactions.copy()     # Make a copy to avoid external modifications
-        self.result = 0                             # Number of successful transactions
         self.thread = None                          # Thread to execute transactions
-        self._stats_lock = threading.Lock()         # Lock for thread-safe stats updates
+        
+        with TransactionWorker.txn_worker_id_lock:
+            self.worker_id = TransactionWorker.txn_worker_id_counter
+            TransactionWorker.txn_worker_id_counter += 1
 
 
     def add_transaction(self, transaction):
@@ -47,7 +48,7 @@ class TransactionWorker:
         Args:
             transaction: Transaction object to execute
         """
-        print(f"Adding transaction T{transaction.transaction_id} to worker")
+        print(f"Adding T{transaction.transaction_id} to worker {self.worker_id} ")
         self.transactions.append(transaction)
 
 
@@ -56,7 +57,7 @@ class TransactionWorker:
         Starts asynchronous execution of all transactions.
         Creates a new thread to run transactions concurrently.
         """
-        print(f"\nStarting worker with {len(self.transactions)} transactions")
+        print(f"\nStarting worker {self.worker_id} with {len(self.transactions)} transactions")
         self.thread = threading.Thread(target=self._run)
         self.thread.start()
 
@@ -69,11 +70,10 @@ class TransactionWorker:
             int: Number of successfully completed transactions
         """
         if self.thread:
-            print("Waiting for worker thread to complete...")
+            print(f"Waiting for worker {self.worker_id} thread to complete...")
             self.thread.join()
-            print("Worker thread completed")
-        return self.result
-
+            print(f"Worker {self.worker_id} thread completed")
+        pass
 
     def _run(self):
         """
@@ -85,29 +85,27 @@ class TransactionWorker:
         2. Calculate final success count
 
         Thread Safety:
-        - Uses _stats_lock to safely update shared state
         - Copies transaction list to avoid external modifications
         - Handles exceptions to prevent thread crashes
         """
         for transaction in self.transactions:
-            print(f"\nWorker processing transaction T{transaction.transaction_id}")
+            print(f"\nWorker {self.worker_id} processing T{transaction.transaction_id}")
             try:
                 result = transaction.run()
-                if result:
-                    print(f"Transaction T{transaction.transaction_id} completed successfully")
-                    with self._stats_lock:
-                        self.stats.append(True)
+                while result is not True:
+                    print(f"T{transaction.transaction_id} failed or was aborted")
+                    result = transaction.run()
+                    if result == "duplicate_key_error":
+                        print("duplicate key error, skipping transaction...")
+                        break
+                    
+                if result == "duplicate_key_error":
+                    continue
                 else:
-                    print(f"Transaction T{transaction.transaction_id} failed or was aborted")
-                    with self._stats_lock:
-                        self.stats.append(False)
+                    print(f"T{transaction.transaction_id} completed successfully")
+
             except Exception as e:
-                print(f"Transaction T{transaction.transaction_id} failed with error: {e}")
+                print(f"T{transaction.transaction_id} failed with error: {e}")
                 import traceback
                 traceback.print_exc()
-                with self._stats_lock:
-                    self.stats.append(False)
 
-        # Calculate final result (count of successful transactions)
-        with self._stats_lock:
-            self.result = sum(1 for stat in self.stats if stat)
