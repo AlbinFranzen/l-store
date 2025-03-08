@@ -54,7 +54,6 @@ for i in range(number_of_transactions):
     transaction_workers[i % num_threads].add_transaction(insert_transactions[i])
 
 
-
 # run transaction workers
 for i in range(num_threads):
     transaction_workers[i].run()

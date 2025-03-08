@@ -153,6 +153,9 @@ class Transaction:
                     # Handle query result
                     if result is False:  # Query failed
                         print(f"T{self.transaction_id} query execution failed")
+                        if "insert" in query.__name__:
+                            print("returning dupe key error")
+                            return "duplicate_key_error"
                         return self.abort()
 
                     # Track successful operations for potential rollback

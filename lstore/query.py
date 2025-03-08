@@ -93,8 +93,12 @@ class Query:
     # FOR BASE PAGES
     """
     def insert(self, *columns):
-        if not self._verify_insert_input(*columns):
+        # Check if primary key already exists   
+        primary_key = list(columns)[0]
+        does_exist = self.table.index.locate(0, primary_key)
+        if does_exist:
             return False
+        
         record = Record(f"b{self.table.current_base_rid}", f"b{self.table.current_base_rid}", f"b{self.table.current_base_rid}", time.time(), [0] * len(columns), [*columns])
         self.table.index.add_record(record)
         
@@ -140,13 +144,6 @@ class Query:
         self.table.current_base_rid += 1
         return True
     
-    
-    def _verify_insert_input(self, *columns):
-        for column in columns:
-            if not isinstance(column, int):
-                return False
-        return True
-
 
     def _parse_page_path(self, path):
         # Extract pagerange index and page index from a path
@@ -210,10 +207,11 @@ class Query:
     """
     def select_version(self, search_key, search_key_index, projected_columns_index, relative_version):
         rids_combined = self.table.index.locate(search_key_index, search_key)
+        
         if not rids_combined:
-            
             print("No records found", search_key, search_key_index)
             return None
+        
         rid_list = rids_combined.split(",")
         # Here, each element in record_lineages is already a lineage (a list of records)
         results = []

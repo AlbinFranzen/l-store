@@ -46,14 +46,13 @@ for i in range(0, number_of_records):
     t = insert_transactions[i % number_of_transactions]
     t.add_query(query.insert, grades_table, *records[key])
 
+
 transaction_workers = []
 for i in range(num_threads):
     transaction_workers.append(TransactionWorker())
     
 for i in range(number_of_transactions):
     transaction_workers[i % num_threads].add_transaction(insert_transactions[i])
-
-
 
 # run transaction workers
 for i in range(num_threads):
@@ -63,6 +62,9 @@ for i in range(num_threads):
 for i in range(num_threads):
     transaction_workers[i].join()
 
+print("Page directory length: ", len(grades_table.page_directory))
+for key, value in grades_table.page_directory.items():
+    print(key, value)
 
 # Check inserted records using select query in the main thread outside workers
 for key in keys:  

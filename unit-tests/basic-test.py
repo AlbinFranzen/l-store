@@ -9,25 +9,11 @@ db.open('./ECS165')
 test_table = db.create_table("test_table", 3, 0)
 query = Query(test_table)
 
-for i in range(0, 5):
-    query.insert(i, i, i)
+for i in range(0, 1):
+    print(query.insert(i, i, i))
 
+print(query.insert(0,10,10))
 
-for i in range(0, 5):
-   query.update(i, None, None, 10*i)
-   
-
-for key, value in test_table.page_directory.items():
-    print(f"Key: {key}, Value: {value}")
-
-for i in range(0, 5):
-    print(query.select_version(i, 0, [1, 1, 1], -1))
-db.close()
-
-db.open('./ECS165')
-
-for i in range(0, 5):
-    print(query.select_version(i, 0, [1, 1, 1], 0))
 #print(query.select(0, 0, [1, 1, 1]))
 
 # print("Page Directory:")
