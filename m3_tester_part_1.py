@@ -62,10 +62,6 @@ for i in range(num_threads):
 for i in range(num_threads):
     transaction_workers[i].join()
 
-print("Page directory length: ", len(grades_table.page_directory))
-for key, value in grades_table.page_directory.items():
-    print(key, value)
-
 # Check inserted records using select query in the main thread outside workers
 for key in keys:  
     record = query.select(key, 0, [1, 1, 1, 1, 1])[0]
@@ -79,6 +75,7 @@ for key in keys:
         pass
         # print('select on', key, ':', record)
 print("Select finished")
+
 
 
 db.close()

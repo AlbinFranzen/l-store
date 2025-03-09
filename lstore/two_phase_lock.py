@@ -5,7 +5,7 @@ class LockMode:
     - SHARED (0): Multiple transactions can read the same data
     - EXCLUSIVE (1): Only one transaction can write to the data
     """
-    SHARED, EXCLUSIVE = enumerate([0,1])
+    SHARED, EXCLUSIVE = 0, 1  # Fixing the usage of enumerate
 
     @staticmethod
     def to_string(mode):
@@ -20,7 +20,7 @@ class LockGranularity:
     - RECORD (3): Locks an individual record
     Locks must be acquired in hierarchical order (table -> page_range -> page -> record)
     """
-    TABLE, PAGE_RANGE, PAGE, RECORD = enumerate([0,1,2,3])
+    TABLE, PAGE_RANGE, PAGE, RECORD = 0, 1, 2, 3  # Fixing the usage of enumerate
 
     @staticmethod
     def to_string(granularity):
@@ -216,7 +216,7 @@ class TwoPhaseLock:
 
             # Print current lock state for debugging
             print(f"Current lock state for {item_id}:")
-            print(f"  - Readers: {lock_info['readers']}")
+            print(f"  - Readers: {', '.join('T' + str(r) for r in lock_info['readers']) if lock_info['readers'] else 'None'}")
             writer_id = lock_info['writer']
             print(f"  - Writer: {'T' + str(writer_id) if writer_id is not None else 'None'}")
 

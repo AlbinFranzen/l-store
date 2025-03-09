@@ -89,21 +89,22 @@ class Transaction:
         page_path = table.page_directory[rid][0]
         record_offset = table.page_directory[rid][1]
 
-        # Split path into components (e.g., ["pagerange_0", "base", "page_1"])
-        dirs = page_path.split('/')
+        # Split path into components (e.g., [".", database, _tables, tablename, pagerange_0", "base", "page_1"])
+        parts = page_path.split('/')
+        print("parts: ",  parts)
 
+        #ecs165/_tables/tablename/pagegrange/base/page
         # Extract page range number from path (e.g., "pagerange_0" -> "0")
-        page_range_num = dirs[0].replace('pagerange_', '')
-
+        page_range = parts[4]
         # Get page type (base or tail) and page number
-        page_type = dirs[1]  # "base" or "tail"
-        page_num = dirs[2]   # "page_X"
+        page_type = parts[5]  # "base" or "tail"
+        page_num = parts[6]   # "page_X"
 
         # Generate lock IDs for each granularity level
         table_lock_id = f"{table_name}"
-        page_range_id = f"{table_name}/pagerange_{page_range_num}"
-        page_lock_id = f"{table_name}/pagerange_{page_range_num}/{page_type}/{page_num}"
-        record_lock_id = f"{table_name}/pagerange_{page_range_num}/{page_type}/{page_num}/{record_offset}"
+        page_range_id = f"{table_name}/{page_range}"
+        page_lock_id = f"{table_name}/{page_range}/{page_type}/{page_num}"
+        record_lock_id = f"{table_name}/{page_range}/{page_type}/{page_num}/{record_offset}"
 
         return table_lock_id, page_range_id, page_lock_id, record_lock_id
 
@@ -143,7 +144,9 @@ class Transaction:
                             print(f"T{self.transaction_id} failed to acquire locks for insert")
                             return self.abort()
                     else:
-                        if not self._acquire_operation_locks(table, args[0], lock_mode):
+                        #self.table.index.locate(search_key_index, search_key)
+                        rid = table.index.locate(0, args[0])
+                        if not self._acquire_operation_locks(table, rid, lock_mode):
                             print(f"T{self.transaction_id} failed to acquire locks for operation")
                             return self.abort()
 

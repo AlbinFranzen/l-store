@@ -73,5 +73,6 @@ def test_two_phase_lock():
 
     print("\n=== Test Finished ===")
 
-
+if __name__ == "__main__":
     test_two_phase_lock()
+
