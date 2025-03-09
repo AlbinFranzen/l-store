@@ -214,7 +214,7 @@ class TwoPhaseLock:
 
             lock_info = lock_dict[item_id]
 
-            # Print current lock state for debugging
+            # print current lock state for debugging
             print(f"Current lock state for {item_id}:")
             print(f"  - Readers: {', '.join('T' + str(r) for r in lock_info['readers']) if lock_info['readers'] else 'None'}")
             writer_id = lock_info['writer']

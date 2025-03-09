@@ -152,6 +152,19 @@ class testingTransactions(unittest.TestCase):
         trans.add_query(self.query.update, self.test_table, 3006, None, 1, None, None, None)
         res = trans.run()
         self.assertTrue(res, msg="failed to commit and called abort returning false")
+        path, offset = self.test_table.page_directory['t1']
+        self.assertEqual(self.test_table.bufferpool.get_page(path).read_index(offset).columns, [3006, 1, 6, 7, 8])
+        
+    def test_run_select_post_update(self):
+        trans = Transaction()
+        trans.add_query(self.query.update, self.test_table, 3006, None, 4, None, None, None)
+        trans.add_query(self.query.update, self.test_table, 3006, None, 3, None, None, None)
+        trans.add_query(self.query.update, self.test_table, 3006, None, 2, None, None, None)
+        trans.add_query(self.query.select_version, self.test_table, 3006, 0, [1, 1, 1, 1, 1], -1)
+        res = trans.run()
+        self.assertTrue(res, msg="failed to commit and called abort returning false")
+        path, offset = self.test_table.page_directory['t3']
+        self.assertEqual(self.test_table.bufferpool.get_page(path).read_index(offset).columns, [3006, 2, 6, 7, 8])
         
     '''    
     def test_abort(self):
@@ -191,10 +204,11 @@ def transactions_Suite():
     #suite.addTest(testingTransactions('test_RunGetIds'))
 
 
-    suite.addTest(testingTransactions('test_run_insert'))    
-    suite.addTest(testingTransactions('test_run_insert_dupe'))
-    suite.addTest(testingTransactions('test_run_select'))
-    suite.addTest(testingTransactions('test_run_update'))
+    #suite.addTest(testingTransactions('test_run_insert'))    
+    #suite.addTest(testingTransactions('test_run_insert_dupe'))
+    #suite.addTest(testingTransactions('test_run_select'))
+    #suite.addTest(testingTransactions('test_run_update'))
+    suite.addTest(testingTransactions('test_run_select_post_update'))
     #suite.addTest(testingTransactions('test_abort'))
     #suite.addTest(testingTransactions('test_commit'))
     

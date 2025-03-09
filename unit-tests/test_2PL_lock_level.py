@@ -1,9 +1,10 @@
 import time
 import os
 import sys
+import threading
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 print(sys.path)
-from lstore.two_phase_lock import *
+from lstore.two_phase_lock import LockMode, LockGranularity, TwoPhaseLock
 
 # Lock manager for two-phase locking
 lock_manager = TwoPhaseLock()

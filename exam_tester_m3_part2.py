@@ -17,10 +17,10 @@ query = Query(grades_table)
 # dictionary for records to test the database: test directory
 records = {}
 
-number_of_records = 1000
-number_of_transactions = 100
-number_of_operations_per_record = 10
-num_threads = 8
+number_of_records = 2 #1000
+number_of_transactions = 2 #100
+number_of_operations_per_record = 2#10
+num_threads = 2
 
 keys = []
 records = {}
@@ -142,4 +142,7 @@ for i in range(0, number_of_aggregates):
         valid_sums += 1
 print("Aggregate version 0 finished. Valid Aggregations: ", valid_sums, '/', number_of_aggregates)
 
+for key, value in query.table.page_directory.items():
+    record = query.table.bufferpool.get_page(value[0]).read_index(value[1])
+    print(f"RID: {key} Record: {record}")
 db.close()

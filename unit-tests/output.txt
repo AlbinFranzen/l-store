@@ -1,0 +1,87 @@
+
+Created Transaction T0
+
+Creating lock manager
+
+T0 adding query: update
+
+T0 adding query: select
+
+Executing Transaction T0
+
+T0 executing update with args: (3006, None, 1, None, None, None)
+parts:  ['.', 'ECS165', '_tables', 'test', 'pagerange_0', 'base', 'page_0']
+T0 requesting locks for operation
+Lock IDs: table=test, page_range=test/pagerange_0, page=test/pagerange_0/base/page_0, record=test/pagerange_0/base/page_0/1
+
+T0 requesting EXCLUSIVE lock on TABLE test
+
+Checking parent locks for T0 requesting EXCLUSIVE lock on TABLE test
+GRANTED: No conflicting parent locks found
+Current lock state for test:
+  - Readers: None
+  - Writer: None
+GRANTED: T0 acquired EXCLUSIVE lock
+
+T0 requesting EXCLUSIVE lock on PAGE_RANGE test/pagerange_0
+
+Checking parent locks for T0 requesting EXCLUSIVE lock on PAGE_RANGE test/pagerange_0
+GRANTED: No conflicting parent locks found
+Current lock state for test/pagerange_0:
+  - Readers: None
+  - Writer: None
+GRANTED: T0 acquired EXCLUSIVE lock
+
+T0 requesting EXCLUSIVE lock on PAGE test/pagerange_0/base/page_0
+
+Checking parent locks for T0 requesting EXCLUSIVE lock on PAGE test/pagerange_0/base/page_0
+GRANTED: No conflicting parent locks found
+Current lock state for test/pagerange_0/base/page_0:
+  - Readers: None
+  - Writer: None
+GRANTED: T0 acquired EXCLUSIVE lock
+
+T0 requesting EXCLUSIVE lock on RECORD test/pagerange_0/base/page_0/1
+
+Checking parent locks for T0 requesting EXCLUSIVE lock on RECORD test/pagerange_0/base/page_0/1
+GRANTED: No conflicting parent locks found
+Current lock state for test/pagerange_0/base/page_0/1:
+  - Readers: None
+  - Writer: None
+GRANTED: T0 acquired EXCLUSIVE lock
+T0 successfully updated record with key b1
+
+T0 executing select with args: (3006, [1, 1, 1, 1, 1])
+parts:  ['.', 'ECS165', '_tables', 'test', 'pagerange_0', 'base', 'page_0']
+T0 requesting locks for operation
+Lock IDs: table=test, page_range=test/pagerange_0, page=test/pagerange_0/base/page_0, record=test/pagerange_0/base/page_0/1
+
+T0 requesting SHARED lock on TABLE test
+T0 already has lock on test
+
+T0 requesting SHARED lock on PAGE_RANGE test/pagerange_0
+T0 already has lock on test/pagerange_0
+
+T0 requesting SHARED lock on PAGE test/pagerange_0/base/page_0
+T0 already has lock on test/pagerange_0/base/page_0
+
+T0 requesting SHARED lock on RECORD test/pagerange_0/base/page_0/1
+T0 already has lock on test/pagerange_0/base/page_0/1
+T0 operation failed with error: Query.select() missing 1 required positional argument: 'projected_columns_index'
+
+Aborting Transaction T0
+Rolling back changes for T0
+Rolling back update for key b1
+Releasing locks for T0
+
+T0 releasing locks on test/pagerange_0/base/page_0/1
+Released exclusive lock for T0 on RECORD test/pagerange_0/base/page_0/1
+
+T0 releasing locks on test/pagerange_0/base/page_0
+Released exclusive lock for T0 on PAGE test/pagerange_0/base/page_0
+
+T0 releasing locks on test/pagerange_0
+
+T0 releasing locks on test
+Released exclusive lock for T0 on TABLE test
+T0 abort complete

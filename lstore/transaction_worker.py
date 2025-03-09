@@ -89,11 +89,11 @@ class TransactionWorker:
         - Handles exceptions to prevent thread crashes
         """
         for transaction in self.transactions:
-            print(f"\nWorker {self.worker_id} processing T{transaction.transaction_id}")
+            #print(f"\nWorker {self.worker_id} processing T{transaction.transaction_id}")
             try:
                 result = transaction.run()
                 while result is not True:
-                    print(f"T{transaction.transaction_id} failed or was aborted")
+                    #print(f"T{transaction.transaction_id} failed or was aborted")
                     result = transaction.run()
                     if result == "duplicate_key_error":
                         print("duplicate key error, skipping transaction...")

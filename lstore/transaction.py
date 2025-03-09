@@ -133,19 +133,18 @@ class Transaction:
             for query, table, args in self.queries:
                 print(f"\nT{self.transaction_id} executing {query.__name__} with args: {args}")
 
-                # Determine lock type and acquire appropriate locks, what about delete?
+                # Determine lock type and acquire appropriate locks
                 is_write = "update" in query.__name__ or "insert" in query.__name__
                 lock_mode = LockMode.EXCLUSIVE if is_write else LockMode.SHARED
 
                 try:
+                    rid = table.index.locate(0, args[0])
                     # Acquire locks based on operation type
                     if "insert" in query.__name__:
                         if not self._acquire_insert_locks(table, lock_mode):
                             print(f"T{self.transaction_id} failed to acquire locks for insert")
                             return self.abort()
                     else:
-                        #self.table.index.locate(search_key_index, search_key)
-                        rid = table.index.locate(0, args[0])
                         if not self._acquire_operation_locks(table, rid, lock_mode):
                             print(f"T{self.transaction_id} failed to acquire locks for operation")
                             return self.abort()
@@ -163,11 +162,12 @@ class Transaction:
 
                     # Track successful operations for potential rollback
                     if "insert" in query.__name__:
-                        print(f"T{self.transaction_id} successfully inserted record with key {args[0]}")
-                        self.changes.append((table, args[0], True))
+                        # Track changes for rollback: (table, rid, is_insert)
+                        print(f"T{self.transaction_id} successfully inserted record with key {rid}")
+                        self.changes.append((table, rid, True))
                     elif "update" in query.__name__:
-                        print(f"T{self.transaction_id} successfully updated record with key {args[0]}")
-                        self.changes.append((table, args[0], False))
+                        print(f"T{self.transaction_id} successfully updated record with key {rid}")
+                        self.changes.append((table, rid, False))
 
                 except Exception as e:
                     print(f"T{self.transaction_id} operation failed with error: {str(e)}")
@@ -244,16 +244,11 @@ class Transaction:
             for table, key, is_insert in reversed(self.changes):
                 try:
                     print(f"Rolling back {'insert' if is_insert else 'update'} for key {key}")
-                    if is_insert:
-                        # For inserts, delete the record
-                        from lstore.query import Query
-                        query = Query(table)
-                        if not query.delete(key):
-                            print(f"Warning: Failed to rollback insert for key {key}")
-                    else:
-                        # For updates, we would need to restore the previous version
-                        # This would require maintaining a copy of the original record
-                        pass
+                    # For inserts, delete the record
+                    from lstore.query import Query
+                    query = Query(table)
+                    if not query.delete(key):
+                        print(f"Warning: Failed to rollback insert for key {key}")
                 except Exception as e:
                     print(f"Error during rollback: {str(e)}")
                     continue

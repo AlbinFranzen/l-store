@@ -217,12 +217,27 @@ class Query:
         results = []
         for rid in rid_list:
             temp_rid = rid
+            
+            # for i in range(abs(relative_version - 2)):
+            #     reached_deleted_record = False 
+            #     # Skip over deleted records
+            #     while not reached_deleted_record:      
+            #         temp_record_path, offset = self.table.page_directory[temp_rid]
+            #         temp_record = self.table.bufferpool.get_page(temp_record_path).read_index(offset) 
+            #         temp_rid = temp_record.indirection
+            #         if list(temp_record.columns) == [None]*len(temp_record.columns):
+            #             reached_deleted_record = True
+            #             continue
+            #         break
+            
             for i in range(abs(relative_version-2)):
+                
                 temp_record_path, offset = self.table.page_directory[temp_rid]
                 temp_record = self.table.bufferpool.get_page(temp_record_path).read_index(offset)    
                 #print(f"Iteration {i} Temp rid: {temp_rid}, Record: {temp_record}")
                 temp_rid = temp_record.indirection  
                 if temp_rid == temp_record.base_rid:
+                    self.table.bufferpool.unpin_page(temp_record_path)
                     break
                 self.table.bufferpool.unpin_page(temp_record_path)
             
