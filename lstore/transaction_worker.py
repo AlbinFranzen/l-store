@@ -91,15 +91,17 @@ class TransactionWorker:
         for transaction in self.transactions:
             #print(f"\nWorker {self.worker_id} processing T{transaction.transaction_id}")
             try:
-                result = transaction.run()
+                result, dupe = transaction.run()
                 while result is not True:
                     #print(f"T{transaction.transaction_id} failed or was aborted")
-                    result = transaction.run()
-                    if result == "duplicate_key_error":
-                        print("duplicate key error, skipping transaction...")
+                    if dupe == "dupe_error":
+                        print("dupe_error, skipping transaction...")
                         break
+                    result, dupe = transaction.run()
                     
-                if result == "duplicate_key_error":
+                print("Result: ", result)
+                if dupe == "dupe_error":
+                    print("dupe_error, skipping transaction...")
                     continue
                 else:
                     print(f"T{transaction.transaction_id} completed successfully")

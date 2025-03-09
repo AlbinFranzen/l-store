@@ -3,16 +3,20 @@ Created Transaction T0
 
 Creating lock manager
 
-T0 adding query: update
+T0 adding query: insert
 
-T0 adding query: select
+Created Transaction T1
+
+T1 adding query: insert
+Adding T0 to worker 0 
+Adding T1 to worker 1 
+
+Starting worker 0 with 1 transactions
 
 Executing Transaction T0
 
-T0 executing update with args: (3006, None, 1, None, None, None)
-parts:  ['.', 'ECS165', '_tables', 'test', 'pagerange_0', 'base', 'page_0']
-T0 requesting locks for operation
-Lock IDs: table=test, page_range=test/pagerange_0, page=test/pagerange_0/base/page_0, record=test/pagerange_0/base/page_0/1
+T0 executing insert with args: (3006, 1, 1, 1, 1)
+T0 requesting table lock for INSERT
 
 T0 requesting EXCLUSIVE lock on TABLE test
 
@@ -23,65 +27,70 @@ Current lock state for test:
   - Writer: None
 GRANTED: T0 acquired EXCLUSIVE lock
 
-T0 requesting EXCLUSIVE lock on PAGE_RANGE test/pagerange_0
-
-Checking parent locks for T0 requesting EXCLUSIVE lock on PAGE_RANGE test/pagerange_0
-GRANTED: No conflicting parent locks found
-Current lock state for test/pagerange_0:
-  - Readers: None
-  - Writer: None
-GRANTED: T0 acquired EXCLUSIVE lock
-
-T0 requesting EXCLUSIVE lock on PAGE test/pagerange_0/base/page_0
-
-Checking parent locks for T0 requesting EXCLUSIVE lock on PAGE test/pagerange_0/base/page_0
-GRANTED: No conflicting parent locks found
-Current lock state for test/pagerange_0/base/page_0:
-  - Readers: None
-  - Writer: None
-GRANTED: T0 acquired EXCLUSIVE lock
-
-T0 requesting EXCLUSIVE lock on RECORD test/pagerange_0/base/page_0/1
-
-Checking parent locks for T0 requesting EXCLUSIVE lock on RECORD test/pagerange_0/base/page_0/1
-GRANTED: No conflicting parent locks found
-Current lock state for test/pagerange_0/base/page_0/1:
-  - Readers: None
-  - Writer: None
-GRANTED: T0 acquired EXCLUSIVE lock
-T0 successfully updated record with key b1
-
-T0 executing select with args: (3006, [1, 1, 1, 1, 1])
-parts:  ['.', 'ECS165', '_tables', 'test', 'pagerange_0', 'base', 'page_0']
-T0 requesting locks for operation
-Lock IDs: table=test, page_range=test/pagerange_0, page=test/pagerange_0/base/page_0, record=test/pagerange_0/base/page_0/1
-
-T0 requesting SHARED lock on TABLE test
-T0 already has lock on test
-
-T0 requesting SHARED lock on PAGE_RANGE test/pagerange_0
-T0 already has lock on test/pagerange_0
-
-T0 requesting SHARED lock on PAGE test/pagerange_0/base/page_0
-T0 already has lock on test/pagerange_0/base/page_0
-
-T0 requesting SHARED lock on RECORD test/pagerange_0/base/page_0/1
-T0 already has lock on test/pagerange_0/base/page_0/1
-T0 operation failed with error: Query.select() missing 1 required positional argument: 'projected_columns_index'
-
 Aborting Transaction T0
 Rolling back changes for T0
-Rolling back update for key b1
 Releasing locks for T0
-
-T0 releasing locks on test/pagerange_0/base/page_0/1
-Released exclusive lock for T0 on RECORD test/pagerange_0/base/page_0/1
-
-T0 releasing locks on test/pagerange_0/base/page_0
-Released exclusive lock for T0 on PAGE test/pagerange_0/base/page_0
-
-T0 releasing locks on test/pagerange_0
 
 T0 releasing locks on test
 Released exclusive lock for T0 on TABLE test
 T0 abort complete
+
+Executing Transaction T0
+
+T0 executing insert with args: (3006, 1, 1, 1, 1)
+T0 requesting table lock for INSERT
+
+T0 requesting EXCLUSIVE lock on TABLE test
+DENIED: T0 is in shrinking phase
+T0 failed to acquire table lock
+T0 failed to acquire locks for insert
+
+Aborting Transaction T0
+Rolling back changes for T0
+Releasing locks for T0
+T0 abort complete
+dupe_error, skipping transaction...
+Result:  (False, None)
+dupe_error, skipping transaction...
+
+Starting worker 1 with 1 transactions
+
+Executing Transaction T1
+
+T1 executing insert with args: (3006, 0, 0, 0, 0)
+T1 requesting table lock for INSERT
+
+T1 requesting EXCLUSIVE lock on TABLE test
+
+Checking parent locks for T1 requesting EXCLUSIVE lock on TABLE test
+GRANTED: No conflicting parent locks found
+Current lock state for test:
+  - Readers: None
+  - Writer: None
+GRANTED: T1 acquired EXCLUSIVE lock
+
+Aborting Transaction T1
+Rolling back changes for T1
+Releasing locks for T1
+
+T1 releasing locks on test
+Released exclusive lock for T1 on TABLE test
+T1 abort complete
+
+Executing Transaction T1
+
+T1 executing insert with args: (3006, 0, 0, 0, 0)
+T1 requesting table lock for INSERT
+
+T1 requesting EXCLUSIVE lock on TABLE test
+DENIED: T1 is in shrinking phase
+T1 failed to acquire table lock
+T1 failed to acquire locks for insert
+
+Aborting Transaction T1
+Rolling back changes for T1
+Releasing locks for T1
+T1 abort complete
+dupe_error, skipping transaction...
+Result:  (False, None)
+dupe_error, skipping transaction...

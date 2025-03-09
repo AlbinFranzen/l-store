@@ -154,12 +154,10 @@ class Transaction:
 
                     # Handle query result
                     if result is False:  # Query failed
-                        print(f"T{self.transaction_id} query execution failed")
                         if "insert" in query.__name__:
-                            print("returning dupe key error")
-                            return "duplicate_key_error"
+                            return self.abort(dupe_error=True) # duplicate key error
                         return self.abort()
-
+                    
                     # Track successful operations for potential rollback
                     if "insert" in query.__name__:
                         # Track changes for rollback: (table, rid, is_insert)
@@ -232,7 +230,7 @@ class Transaction:
         return True
 
 
-    def abort(self):
+    def abort(self, dupe_error=False):
         """
         Aborts the transaction and rolls back any changes.
         """
@@ -261,7 +259,8 @@ class Transaction:
                 self.held_locks.clear()
 
         print(f"T{self.transaction_id} abort complete")
-        return False
+        
+        return False, "dupe_error" if dupe_error else None
 
 
     def commit(self):

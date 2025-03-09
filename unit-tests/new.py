@@ -165,7 +165,52 @@ class testingTransactions(unittest.TestCase):
         self.assertTrue(res, msg="failed to commit and called abort returning false")
         path, offset = self.test_table.page_directory['t3']
         self.assertEqual(self.test_table.bufferpool.get_page(path).read_index(offset).columns, [3006, 2, 6, 7, 8])
+    
+    def test_run_contending_insert(self):
+        trans1 = Transaction()
+        trans1.add_query(self.query.insert, self.test_table, 3006, 1, 1, 1, 1)
+ 
+        trans2 = Transaction()
+        trans2.add_query(self.query.insert, self.test_table, 3006, 0, 0, 0, 0)
+        worker1 = TransactionWorker()
+        worker2 = TransactionWorker()
+        worker1.add_transaction(trans1)
+        worker2.add_transaction(trans2)
+        for worker in worker1, worker2:
+            worker.run()
+            
+        path1, offset1 = self.test_table.page_directory['b0']
+        path2, offset2 = self.test_table.page_directory['b1']
         
+        if self.test_table.bufferpool.get_page(path1).read_index(offset1).columns == [1, 1, 1, 1, 1]:
+            self.assertEqual(self.test_table.bufferpool.get_page(path1).read_index(offset1).columns, [1, 1, 1, 1, 1])
+            self.assertEqual(self.test_table.bufferpool.get_page(path2).read_index(offset2).columns, [0, 0, 0, 0, 0])
+        else:
+            self.assertEqual(self.test_table.bufferpool.get_page(path2).read_index(offset2).columns, [1, 1, 1, 1, 1])
+            self.assertEqual(self.test_table.bufferpool.get_page(path1).read_index(offset1).columns, [0, 0, 0, 0, 0])
+        
+    def test_run_muli_update(self):
+        trans1 = Transaction()
+        trans1.add_query(self.query.update, self.test_table, 3006, 1, 1, 1, 1, 1)
+ 
+        trans2 = Transaction()
+        trans2.add_query(self.query.update, self.test_table, 3006, 0, 0, 0, 0, 0)
+        worker1 = TransactionWorker()
+        worker2 = TransactionWorker()
+        worker1.add_transaction(trans1)
+        worker2.add_transaction(trans2)
+        for worker in worker1, worker2:
+            worker.run()
+            
+        path1, offset1 = self.test_table.page_directory['t1']
+        path2, offset2 = self.test_table.page_directory['t2']
+        
+        self.assertEqual(self.test_table.bufferpool.get_page(path1).read_index(offset1).columns, [1, 1, 1, 1, 1])
+        self.assertEqual(self.test_table.bufferpool.get_page(path2).read_index(offset2).columns, [0, 0, 0, 0, 0])
+
+
+
+   
     '''    
     def test_abort(self):
         #goes through changes list and does a query delete on each key
@@ -208,7 +253,7 @@ def transactions_Suite():
     #suite.addTest(testingTransactions('test_run_insert_dupe'))
     #suite.addTest(testingTransactions('test_run_select'))
     #suite.addTest(testingTransactions('test_run_update'))
-    suite.addTest(testingTransactions('test_run_select_post_update'))
+    suite.addTest(testingTransactions('test_run_contending_insert'))
     #suite.addTest(testingTransactions('test_abort'))
     #suite.addTest(testingTransactions('test_commit'))
     
