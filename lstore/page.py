@@ -1,10 +1,12 @@
 import msgpack
 from lstore.config import PAGE_RECORD_SIZE
+import threading
 
 class Page:
     def __init__(self):
         self.num_records = 0
         self.data = []
+        self._write_lock = threading.RLock()
 
     def __repr__(self):
         return f"num_records: {self.num_records}  |  data: {self.data}"
@@ -13,11 +15,12 @@ class Page:
         return self.num_records < PAGE_RECORD_SIZE
 
     def write(self, record):  # Append record
-        if not self.has_capacity():
-            return
-        self.data.append(record)
-        self.num_records += 1
-        return self.num_records-1
+        with self._write_lock:
+            if not self.has_capacity():
+                return
+            self.data.append(record)
+            self.num_records += 1
+            return self.num_records-1
     
     def overwrite_index(self, index, record):  # Overwrite record at index
         self.data[index] = record

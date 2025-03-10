@@ -175,7 +175,7 @@ class Transaction:
 
             # All operations successful, commit the transaction
             print(f"T{self.transaction_id} all queries successful")
-            return self.commit()
+            return self.commit(), None
 
         except Exception as e:
             print(f"T{self.transaction_id} failed with error: {str(e)}")

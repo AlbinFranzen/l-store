@@ -1,6 +1,7 @@
 import threading
 from lstore.index import Index
 from lstore.table import Table, Record
+from lstore.transaction import Transaction
 
 class TransactionWorker:
     """
@@ -89,15 +90,26 @@ class TransactionWorker:
         - Handles exceptions to prevent thread crashes
         """
         for transaction in self.transactions:
-            #print(f"\nWorker {self.worker_id} processing T{transaction.transaction_id}")
             try:
                 result, dupe = transaction.run()
+                i = 0
                 while result is not True:
-                    #print(f"T{transaction.transaction_id} failed or was aborted")
+                    i += 1
+                    if i > 10000:
+                        print("Transaction failed 10000 times, aborting...")
+                        break
                     if dupe == "dupe_error":
                         print("dupe_error, skipping transaction...")
                         break
-                    result, dupe = transaction.run()
+                    
+                    # Create a fresh copy of the transaction
+                    fresh_txn = Transaction()
+                    # Copy all queries from the original transaction
+                    for query, table, args in transaction.queries:
+                        fresh_txn.add_query(query, table, *args)
+                    
+                    # Run the fresh transaction instead
+                    result, dupe = fresh_txn.run()
                     
                 print("Result: ", result)
                 if dupe == "dupe_error":
