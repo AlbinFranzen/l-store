@@ -128,13 +128,14 @@ class Query:
                 os.makedirs(f"{new_pagerange_path}/base", exist_ok=True)
                 os.makedirs(f"{new_pagerange_path}/tail", exist_ok=True)
                 insert_path = f"{new_pagerange_path}/base/page_0"
-                self.table.page_range_tps[last_pagerange_index + 1] = 0
+                self.table.page_range_tps.append(0)
                 self.table.tail_page_locations.append(f"{new_pagerange_path}/tail/page_0")
                 self.table.base_page_locations.append(insert_path)
                 self.table.pr_unmerged_updates.append(0)
                 self.table.tail_page_indices.append(0)
                 first_tail_page = Page()
                 self.table.bufferpool.add_frame(f"{new_pagerange_path}/tail/page_0", first_tail_page)
+                
     
         
             self.table.last_path = insert_path

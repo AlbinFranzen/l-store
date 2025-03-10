@@ -53,7 +53,7 @@ class Table:
         self.write_merge_lock = threading.Lock()
         
         # TPS for each page_range
-        self.page_range_tps = {0: 0}
+        self.page_range_tps = [0]
 
 
     def _init_page_range_storage(self):
@@ -96,8 +96,7 @@ class Table:
             with self.merge_lock:
                 
                 # Get the last merged TPS for this page range
-                last_tps = self.page_range_tps.get(page_range_index, 0)
-                        
+                last_tps = self.page_range_tps[page_range_index]    
                 
                 # Get all the base records
                 base_dir = os.path.join(self.path, f"pagerange_{page_range_index}", "base/page_")
@@ -133,7 +132,7 @@ class Table:
                     if first_update == False: # set new tps to the last rid in the tail page
                         last_tps_temp = int(new_tail_records[-1].rid[1:])
                         first_update = True
-                    for record in reversed(new_tail_records): 
+                    for record in reversed(new_tail_records):
                         if int(record.rid[1:]) <= last_tps:
                             reached_last_tps = True
                             break
@@ -153,7 +152,8 @@ class Table:
                             updated_rids.add(record.base_rid)
                 
                 # Reset unmerged updates
-                self.page_range_tps[page_range_index] = last_tps_temp
+                if last_tps_temp is not None:
+                    self.page_range_tps[page_range_index] = last_tps_temp
                 self.pr_unmerged_updates[page_range_index] = 0
 
         except Exception as e:
