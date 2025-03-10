@@ -3,6 +3,7 @@ from collections import OrderedDict
 from lstore.index import Index
 from lstore.table import Table, Record
 from lstore.two_phase_lock import TwoPhaseLock, LockMode, LockGranularity
+import time
 
 class Transaction:
     """
@@ -127,7 +128,7 @@ class Transaction:
         Executes all queries in the transaction while maintaining isolation.
         Returns True if all operations succeed, False otherwise.
         """
-        #print(f"\nExecuting Transaction T{self.transaction_id}")
+        time.sleep(0.000000001)
         # If any query in this transaction is an insert or update, force exclusive locks
         overall_exclusive = any("update" in q.__name__ or "insert" in q.__name__ for q, table, args in self.queries)
 
@@ -193,7 +194,7 @@ class Transaction:
                 lock_mode,
                 LockGranularity.TABLE
         ):
-            #print(f"T{self.transaction_id} failed to acquire table lock")
+            # print(f"T{self.transaction_id} failed to acquire table lock")
             return False
         # {item_id: (granularity, mode)}
         self.held_locks[table.name] = (LockGranularity.TABLE, lock_mode)

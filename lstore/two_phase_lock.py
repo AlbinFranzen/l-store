@@ -1,5 +1,6 @@
 import threading
 
+
 class LockMode:
     """
     - SHARED (0): Multiple transactions can read the same data
@@ -122,8 +123,8 @@ class TwoPhaseLock:
         """
         # Split item_id into parts to check parent locks
         parts = item_id.split('/')
-        print(f"\nChecking parent locks for T{transaction_id} requesting {LockMode.to_string(mode)} "
-              f"lock on {LockGranularity.to_string(granularity)} {item_id}")
+        #print(f"\nChecking parent locks for T{transaction_id} requesting {LockMode.to_string(mode)} "
+              #f"lock on {LockGranularity.to_string(granularity)} {item_id}")
 
         # Build list of parent locks to check based on granularity
         parent_locks = []
@@ -154,10 +155,10 @@ class TwoPhaseLock:
                     lock_dict[lock_id]["writer"] is not None and
                     # Check if exclusive lock is not owned by this transaction
                     lock_dict[lock_id]["writer"] != transaction_id):
-                print(f"DENIED: {lock_id} is exclusively locked by T{lock_dict[lock_id]['writer']}")
+                #print(f"DENIED: {lock_id} is exclusively locked by T{lock_dict[lock_id]['writer']}")
                 return False
 
-        print(f"GRANTED: No conflicting parent locks found")
+        #print(f"GRANTED: No conflicting parent locks found")
         return True
 
 
@@ -182,8 +183,8 @@ class TwoPhaseLock:
             True if lock was acquired, False if denied
         """
         with self.mut:
-            print(f"\nT{transaction_id} requesting {LockMode.to_string(mode)} lock on "
-                  f"{LockGranularity.to_string(granularity)} {item_id}")
+            #print(f"\nT{transaction_id} requesting {LockMode.to_string(mode)} lock on "
+               #   f"{LockGranularity.to_string(granularity)} {item_id}")
 
             # Create transaction object if not exists
             if transaction_id not in self.transactions:
@@ -193,7 +194,7 @@ class TwoPhaseLock:
 
             # Cannot acquire new locks in shrinking phase (2PL rule)
             if transaction.shrinking_phase:
-                print(f"DENIED: T{transaction_id} is in shrinking phase")
+                #print(f"DENIED: T{transaction_id} is in shrinking phase")
                 return False
 
             # Get appropriate lock dictionary for this granularity
@@ -201,7 +202,7 @@ class TwoPhaseLock:
 
             # Check if transaction already has this lock
             if self._has_lock(transaction_id, item_id, lock_dict):
-                print(f"T{transaction_id} already has lock on {item_id}")
+                #print(f"T{transaction_id} already has lock on {item_id}")
                 return True
 
             # Check if parent locks conflict (hierarchical locking)
@@ -214,28 +215,28 @@ class TwoPhaseLock:
 
             lock_info = lock_dict[item_id]
 
-            # print current lock state for debugging
-            print(f"Current lock state for {item_id}:")
-            print(f"  - Readers: {', '.join('T' + str(r) for r in lock_info['readers']) if lock_info['readers'] else 'None'}")
+            # #print current lock state for debugging
+            #print(f"Current lock state for {item_id}:")
+            #print(f"  - Readers: {', '.join('T' + str(r) for r in lock_info['readers']) if lock_info['readers'] else 'None'}")
             writer_id = lock_info['writer']
-            print(f"  - Writer: {'T' + str(writer_id) if writer_id is not None else 'None'}")
+            #print(f"  - Writer: {'T' + str(writer_id) if writer_id is not None else 'None'}")
 
             # Handle shared lock request
             if mode == LockMode.SHARED:
                 if lock_info["writer"] is None or lock_info["writer"] == transaction_id:
                     lock_info["readers"].add(transaction_id)
-                    print(f"GRANTED: T{transaction_id} acquired SHARED lock")
+                    #print(f"GRANTED: T{transaction_id} acquired SHARED lock")
                     return True
-                print(f"DENIED: Item is exclusively locked by T{lock_info['writer']}")
+                #print(f"DENIED: Item is exclusively locked by T{lock_info['writer']}")
 
             # Handle exclusive lock request
             else:  # EXCLUSIVE
                 if (not lock_info["readers"] or lock_info["readers"] == {transaction_id}) and \
                         (lock_info["writer"] is None or lock_info["writer"] == transaction_id):
                     lock_info["writer"] = transaction_id
-                    print(f"GRANTED: T{transaction_id} acquired EXCLUSIVE lock")
+                    #print(f"GRANTED: T{transaction_id} acquired EXCLUSIVE lock")
                     return True
-                print(f"DENIED: Conflicting readers {lock_info['readers']} or writer T{lock_info['writer']}")
+                #print(f"DENIED: Conflicting readers {lock_info['readers']} or writer T{lock_info['writer']}")
 
             return False
 
@@ -254,10 +255,10 @@ class TwoPhaseLock:
             item_id: Resource identifier to release locks from
         """
         with self.mut:
-            print(f"\nT{transaction_id} releasing locks on {item_id}")
+            #print(f"\nT{transaction_id} releasing locks on {item_id}")
 
             if transaction_id not in self.transactions:
-                print(f"No transaction found for T{transaction_id}")
+                #print(f"No transaction found for T{transaction_id}")
                 return
 
             # Mark transaction as in shrinking phase (2PL rule)
@@ -273,9 +274,9 @@ class TwoPhaseLock:
                     # Release shared lock if held
                     if transaction_id in lock_info["readers"]:
                         lock_info["readers"].remove(transaction_id)
-                        print(f"Released shared lock for T{transaction_id} on {LockGranularity.to_string(granularity)} {item_id}")
+                        #print(f"Released shared lock for T{transaction_id} on {LockGranularity.to_string(granularity)} {item_id}")
 
                     # Release exclusive lock if held
                     if lock_info["writer"] == transaction_id:
                         lock_info["writer"] = None
-                        print(f"Released exclusive lock for T{transaction_id} on {LockGranularity.to_string(granularity)} {item_id}")
+                        #print(f"Released exclusive lock for T{transaction_id} on {LockGranularity.to_string(granularity)} {item_id}")

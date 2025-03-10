@@ -49,7 +49,7 @@ class TransactionWorker:
         Args:
             transaction: Transaction object to execute
         """
-        print(f"Adding T{transaction.transaction_id} to worker {self.worker_id} ")
+        #print(f"Adding T{transaction.transaction_id} to worker {self.worker_id} ")
         self.transactions.append(transaction)
 
 
@@ -58,7 +58,7 @@ class TransactionWorker:
         Starts asynchronous execution of all transactions.
         Creates a new thread to run transactions concurrently.
         """
-        print(f"\nStarting worker {self.worker_id} with {len(self.transactions)} transactions")
+        #print(f"\nStarting worker {self.worker_id} with {len(self.transactions)} transactions")
         self.thread = threading.Thread(target=self._run)
         self.thread.start()
 
@@ -71,9 +71,9 @@ class TransactionWorker:
             int: Number of successfully completed transactions
         """
         if self.thread:
-            print(f"Waiting for worker {self.worker_id} thread to complete...")
+            #print(f"Waiting for worker {self.worker_id} thread to complete...")
             self.thread.join()
-            print(f"Worker {self.worker_id} thread completed")
+            #print(f"Worker {self.worker_id} thread completed")
         pass
 
     def _run(self):
