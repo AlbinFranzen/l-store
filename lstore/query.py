@@ -170,15 +170,14 @@ class Query:
     # Assume that select will never be called on a key that doesn't exist
     """
     def select(self, search_key, search_key_index, projected_columns_index):
-        # Get the base rids of the records with the search key
         rid_combined_string = self.table.index.locate(search_key_index, search_key)
+        
         if rid_combined_string == False:
             return False
         
         rid_list = rid_combined_string.split(",")
-        
         # Merge the lineage
-        records = []
+        records = []   
         for rid in rid_list:
             base_path, base_offset = self.table.page_directory[rid]
             base_page = self.table.bufferpool.get_page(base_path)
@@ -189,10 +188,13 @@ class Query:
             tail_page = self.table.bufferpool.get_page(tail_path)
             tail_record = tail_page.read_index(tail_offset)
             
-            new_record = copy.deepcopy(tail_record)
-            new_record.columns = [element for element, bit in zip(tail_record.columns, projected_columns_index) if bit == 1]
+            new_record = Record(tail_record.base_rid, tail_record.indirection, tail_record.rid, tail_record.start_time, tail_record.schema_encoding,[element for element, bit in 
+                                zip(tail_record.columns, projected_columns_index) if bit == 1])
             if new_record:
                 records.append(new_record)
+            
+            self.table.bufferpool.unpin_page(tail_path)
+        
         return records if records else False
 
     """
