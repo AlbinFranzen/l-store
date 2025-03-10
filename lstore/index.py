@@ -1,18 +1,20 @@
 import bisect
+from collections import deque
 
 class Index:
     def __init__(self, table):
         self.table_name = table.name
         self.num_columns = table.num_columns
         self.indices = [None] * self.num_columns
-        self.insert_cache = {col: [] for col in range(self.num_columns)}
+        # Use deque for faster append/pop operations
+        self.insert_cache = {col: deque() for col in range(self.num_columns)}
         self.max_keys = [None] * self.num_columns
         self.insert_cache_size = 50000
-        self.unsorted_cache = {col: [] for col in range(self.num_columns)}
-        self.unsorted_threshold = 1000
+        # Increase threshold to reduce sorting frequency
+        self.unsorted_cache = {col: deque() for col in range(self.num_columns)} 
+        self.unsorted_threshold = 2000
         self.primary_key_cache = {}
-        # NEW: Sorted list for primary key (column 0) records
-        self.sorted_records = []  # list of tuples (key, encoded_rid)
+        self.sorted_records = []
         for col in range(self.num_columns):
             self.create_index(col)
 
@@ -207,6 +209,7 @@ class BPlusTree:
         self.order = order
         self.max_keys = order - 1
         self.root = BPlusTreeNode(is_leaf=True)
+        self._size = 0
 
     def search(self, key):
         node = self.root
@@ -244,6 +247,7 @@ class BPlusTree:
             self.split_child(new_root, 0)
             self.root = new_root
         self.insert_non_full(self.root, key, value)
+        self._size += 1  
 
     def insert_non_full(self, node, key, value):
         if node.is_leaf:
@@ -295,17 +299,11 @@ class BPlusTree:
         return node.keys[-1] if node.keys else None
 
     def __len__(self):
-        count = 0
-        node = self.root
-        while not node.is_leaf:
-            node = node.children[0]
-        while node:
-            count += len(node.keys)
-            node = node.next
-        return count
+        return self._size
 
     # Add a method to get all key-value pairs
     def items(self):
+        __slots__ = ('is_leaf', 'keys', 'children', 'next')
         """Get all key-value pairs in the tree"""
         result = []
         node = self.root
