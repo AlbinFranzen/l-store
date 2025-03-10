@@ -265,7 +265,7 @@ class TwoPhaseLock:
             transaction.shrinking_phase = True
 
             # Release locks at all granularity levels
-            for granularity in [LockGranularity.RECORD, LockGranularity.PAGE_RANGE, LockGranularity.PAGE, LockGranularity.TABLE]:
+            for granularity in [LockGranularity.RECORD, LockGranularity.PAGE_RANGE,LockGranularity.PAGE, LockGranularity.TABLE]:
                 lock_dict = self._get_lock_dict(granularity)
                 if item_id in lock_dict:
                     lock_info = lock_dict[item_id]

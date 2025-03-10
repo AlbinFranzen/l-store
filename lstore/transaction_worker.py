@@ -95,11 +95,11 @@ class TransactionWorker:
                 i = 0
                 while result is not True:
                     i += 1
-                    if i > 10000:
-                        print("Transaction failed 10000 times, aborting...")
+                    if i > 1000:
+                        #print("Transaction failed 10000 times, aborting...")
                         break
                     if dupe == "dupe_error":
-                        print("dupe_error, skipping transaction...")
+                        #print("dupe_error, skipping transaction...")
                         break
                     
                     # Create a fresh copy of the transaction
@@ -111,15 +111,16 @@ class TransactionWorker:
                     # Run the fresh transaction instead
                     result, dupe = fresh_txn.run()
                     
-                print("Result: ", result)
+                #print("Result: ", result)
                 if dupe == "dupe_error":
-                    print("dupe_error, skipping transaction...")
+                    #print("dupe_error, skipping transaction...")
                     continue
                 else:
-                    print(f"T{transaction.transaction_id} completed successfully")
+                    pass
+                    #print(f"T{transaction.transaction_id} completed successfully")
 
             except Exception as e:
-                print(f"T{transaction.transaction_id} failed with error: {e}")
+                #print(f"T{transaction.transaction_id} failed with error: {e}")
                 import traceback
                 traceback.print_exc()
 

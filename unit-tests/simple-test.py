@@ -20,23 +20,30 @@ query.insert(3005, 1, 2, 3, 4) #rid is b0 (yes i had to write this im stupid)
 query.insert(3006, 5, 6, 7, 8)
 
 trans1 = Transaction()
-trans1.add_query(query.update, test_table, 3006, None, 1, 1, 1, 1)
+trans1.add_query(query.select, test_table, 3005, 0, [1, 1, 1, 1, 1])
+trans1.add_query(query.update, test_table, 3005, None, 0, 0, 0, 0)
+trans1.add_query(query.select, test_table, 3005, 0, [1, 1, 1, 1, 1])
+trans1.add_query(query.update, test_table, 3005, None, 1, 1, 1, 1)
 
 trans2 = Transaction()
-trans2.add_query(query.update, test_table, 3006, None, 0, 0, 0, 0)
+trans2.add_query(query.select, test_table, 3006, 0, [1, 1, 1, 1, 1])
+trans2.add_query(query.update, test_table, 3006, None, 2, 2, 2, 2)
+trans2.add_query(query.select, test_table, 3006, 0, [1, 1, 1, 1, 1])
+trans2.add_query(query.update, test_table, 3006, None, 3, 3, 3, 3)
+
 worker1 = TransactionWorker()
 worker2 = TransactionWorker()
 worker1.add_transaction(trans1)
 worker2.add_transaction(trans2)
 for worker in worker1, worker2:
     worker.run()
-
+    
 worker1.join()
 worker2.join()
 
 print("Table directory:", test_table.page_directory)
 
 for rid, location in test_table.page_directory.items():
-    print(f"Record {rid}: {test_table.bufferpool.get_page(location[0]).read_index(location[1])}")
+    print(f"Key: {rid}, Record {rid}: {test_table.bufferpool.get_page(location[0]).read_index(location[1])}")
 
 

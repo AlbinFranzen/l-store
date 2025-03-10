@@ -42,7 +42,7 @@ class Transaction:
         """
         with cls.global_lock_manager_lock:
             if cls.global_lock_manager is None:
-                print("\nCreating lock manager")
+                #print("\nCreating lock manager")
                 cls.global_lock_manager = TwoPhaseLock()
             return cls.global_lock_manager
 
@@ -64,7 +64,7 @@ class Transaction:
         with Transaction.transaction_id_lock:
             self.transaction_id = Transaction.transaction_id_counter
             Transaction.transaction_id_counter += 1
-        print(f"\nCreated Transaction T{self.transaction_id}")
+        #print(f"\nCreated Transaction T{self.transaction_id}")
         self.lock_manager = Transaction.get_lock_manager()
 
 
@@ -91,7 +91,7 @@ class Transaction:
 
         # Split path into components (e.g., [".", database, _tables, tablename, pagerange_0", "base", "page_1"])
         parts = page_path.split('/')
-        print("parts: ",  parts)
+        #print("parts: ",  parts)
 
         #ecs165/_tables/tablename/pagegrange/base/page
         # Extract page range number from path (e.g., "pagerange_0" -> "0")
@@ -118,7 +118,7 @@ class Transaction:
             table: Table to operate on
             *args: Arguments for the query function
         """
-        print(f"\nT{self.transaction_id} adding query: {query.__name__}")
+        #print(f"\nT{self.transaction_id} adding query: {query.__name__}")
         self.queries.append((query, table, args))
 
 
@@ -127,58 +127,54 @@ class Transaction:
         Executes all queries in the transaction while maintaining isolation.
         Returns True if all operations succeed, False otherwise.
         """
-        print(f"\nExecuting Transaction T{self.transaction_id}")
+        #print(f"\nExecuting Transaction T{self.transaction_id}")
+        # If any query in this transaction is an insert or update, force exclusive locks
+        overall_exclusive = any("update" in q.__name__ or "insert" in q.__name__ for q, table, args in self.queries)
 
         try:
             for query, table, args in self.queries:
-                print(f"\nT{self.transaction_id} executing {query.__name__} with args: {args}")
+                #print(f"\nT{self.transaction_id} executing {query.__name__} with args: {args}")
+                # Decide lock_mode: if overall_exclusive is True then use EXCLUSIVE for every operation
+                if overall_exclusive or ("update" in query.__name__ or "insert" in query.__name__):
+                    lock_mode = LockMode.EXCLUSIVE
+                else:
+                    lock_mode = LockMode.SHARED
 
-                # Determine lock type and acquire appropriate locks
-                is_write = "update" in query.__name__ or "insert" in query.__name__
-                lock_mode = LockMode.EXCLUSIVE if is_write else LockMode.SHARED
-
-                try:
-                    rid = table.index.locate(0, args[0])
-                    # Acquire locks based on operation type
-                    if "insert" in query.__name__:
-                        if not self._acquire_insert_locks(table, lock_mode):
-                            print(f"T{self.transaction_id} failed to acquire locks for insert")
-                            return self.abort()
-                    else:
-                        if not self._acquire_operation_locks(table, rid, lock_mode):
-                            print(f"T{self.transaction_id} failed to acquire locks for operation")
-                            return self.abort()
-
-                    # Execute the query
-                    result = query(*args)
-
-                    # Handle query result
-                    if result is False:  # Query failed
-                        if "insert" in query.__name__:
-                            return self.abort(dupe_error=True) # duplicate key error
+                if "insert" in query.__name__:
+                    if not self._acquire_insert_locks(table, lock_mode):
+                        #print(f"T{self.transaction_id} failed to acquire locks for insert")
                         return self.abort()
-                    
-                    # Track successful operations for potential rollback
-                    if "insert" in query.__name__:
-                        # Track changes for rollback: (table, rid, is_insert)
-                        print(f"T{self.transaction_id} successfully inserted record with key {rid}")
-                        self.changes.append((table, rid, True))
-                    elif "update" in query.__name__:
-                        print(f"T{self.transaction_id} successfully updated record with key {rid}")
-                        self.changes.append((table, rid, False))
+                else:
+                    rid = table.index.locate(0, args[0])
+                    if not rid:
+                        #print(f"T{self.transaction_id} could not locate record with key {args[0]}")
+                        return self.abort()
+                    if not self._acquire_operation_locks(table, rid, lock_mode):
+                        #print(f"T{self.transaction_id} failed to acquire operation locks")
+                        return self.abort()
 
-                except Exception as e:
-                    print(f"T{self.transaction_id} operation failed with error: {str(e)}")
-                    import traceback
-                    traceback.print_exc()
+                # Execute the query
+                result = query(*args)
+
+                # Handle query result
+                if result is False:
+                    if "insert" in query.__name__:
+                        return self.abort(dupe_error=True)
                     return self.abort()
 
-            # All operations successful, commit the transaction
-            print(f"T{self.transaction_id} all queries successful")
+                # Track successful operations for potential rollback
+                if "insert" in query.__name__:
+                    #print(f"T{self.transaction_id} successfully inserted record with key {args[0]}")
+                    self.changes.append((table, args[0], True))
+                elif "update" in query.__name__:
+                    #print(f"T{self.transaction_id} successfully updated record with key {args[0]}")
+                    self.changes.append((table, args[0], False))
+
+            #print(f"T{self.transaction_id} all queries successful")
             return self.commit(), None
 
         except Exception as e:
-            print(f"T{self.transaction_id} failed with error: {str(e)}")
+            #print(f"T{self.transaction_id} failed with error: {str(e)}")
             import traceback
             traceback.print_exc()
             return self.abort()
@@ -189,7 +185,7 @@ class Transaction:
         Helper method to acquire locks for insert operations
         Inserts require table lock
         """
-        print(f"T{self.transaction_id} requesting table lock for INSERT")
+        #print(f"T{self.transaction_id} requesting table lock for INSERT")
         # Acquire table lock from lock manager
         if not self.lock_manager.acquire_lock(
                 self.transaction_id,
@@ -197,7 +193,7 @@ class Transaction:
                 lock_mode,
                 LockGranularity.TABLE
         ):
-            print(f"T{self.transaction_id} failed to acquire table lock")
+            #print(f"T{self.transaction_id} failed to acquire table lock")
             return False
         # {item_id: (granularity, mode)}
         self.held_locks[table.name] = (LockGranularity.TABLE, lock_mode)
@@ -207,8 +203,8 @@ class Transaction:
     def _acquire_operation_locks(self, table, rid, lock_mode):
         """Helper method to acquire hierarchical locks for other operations"""
         table_id, page_range_id, page_id, record_id = self._get_lock_ids(table, rid)
-        print(f"T{self.transaction_id} requesting locks for operation")
-        print(f"Lock IDs: table={table_id}, page_range={page_range_id}, page={page_id}, record={record_id}")
+        #print(f"T{self.transaction_id} requesting locks for operation")
+        #print(f"Lock IDs: table={table_id}, page_range={page_range_id}, page={page_id}, record={record_id}")
 
         # Define lock hierarchy
         locks_to_acquire = [
@@ -223,7 +219,7 @@ class Transaction:
             if not self.lock_manager.acquire_lock(
                     self.transaction_id, item_id, lock_mode, granularity
             ):
-                print(f"T{self.transaction_id} failed to acquire {granularity} lock")
+                #print(f"T{self.transaction_id} failed to acquire {granularity} lock")
                 return False
             self.held_locks[item_id] = (granularity, lock_mode)
 
@@ -234,31 +230,32 @@ class Transaction:
         """
         Aborts the transaction and rolls back any changes.
         """
-        print(f"\nAborting Transaction T{self.transaction_id}")
+        #print(f"\nAborting Transaction T{self.transaction_id}")
 
         try:
             # Rollback changes in reverse order
-            print(f"Rolling back changes for T{self.transaction_id}")
+            #print(f"Rolling back changes for T{self.transaction_id}")
             for table, key, is_insert in reversed(self.changes):
                 try:
-                    print(f"Rolling back {'insert' if is_insert else 'update'} for key {key}")
+                    #print(f"Rolling back {'insert' if is_insert else 'update'} for key {key}")
                     # For inserts, delete the record
                     from lstore.query import Query
                     query = Query(table)
                     if not query.delete(key):
-                        print(f"Warning: Failed to rollback insert for key {key}")
+                        pass
+                        #print(f"Warning: Failed to rollback insert for key {key}")
                 except Exception as e:
-                    print(f"Error during rollback: {str(e)}")
+                    #print(f"Error during rollback: {str(e)}")
                     continue
         finally:
             # Always release locks, even if rollback fails
             if self.lock_manager:
-                print(f"Releasing locks for T{self.transaction_id}")
+                #print(f"Releasing locks for T{self.transaction_id}")
                 for item_id in reversed(self.held_locks):
                     self.lock_manager.release_lock(self.transaction_id, item_id)
                 self.held_locks.clear()
 
-        print(f"T{self.transaction_id} abort complete")
+        #print(f"T{self.transaction_id} abort complete")
         
         return False, "dupe_error" if dupe_error else None
 
@@ -272,7 +269,7 @@ class Transaction:
         2. Release all locks in reverse order of acquisition (automatically handles granularity order)
         3. Return True to indicate transaction success
         """
-        print(f"\nCommitting Transaction T{self.transaction_id}")
+        #print(f"\nCommitting Transaction T{self.transaction_id}")
 
         # Release all locks in reverse order of acquisition
         # This automatically handles granularity order since we acquired in correct order
@@ -281,5 +278,5 @@ class Transaction:
                 self.lock_manager.release_lock(self.transaction_id, item_id)
             self.held_locks.clear()
 
-        print(f"T{self.transaction_id} commit complete")
+        #print(f"T{self.transaction_id} commit complete")
         return True
