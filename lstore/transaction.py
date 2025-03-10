@@ -128,7 +128,7 @@ class Transaction:
         Executes all queries in the transaction while maintaining isolation.
         Returns True if all operations succeed, False otherwise.
         """
-        time.sleep(0.000000001)
+        time.sleep(0.0001)
         # If any query in this transaction is an insert or update, force exclusive locks
         overall_exclusive = any("update" in q.__name__ or "insert" in q.__name__ for q, table, args in self.queries)
 
